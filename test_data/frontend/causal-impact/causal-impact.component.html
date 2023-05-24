@@ -1,0 +1,717 @@
+<div class="content">
+  <div class="container-primary search-container">
+    <div class="search-content">
+      <div class="icon">
+        <img src="assets/icons/Header-CausalImpact-Icon.svg" style="width: 24px"/>
+      </div>
+      <div class="description">
+        <div class="title">Causal Impact</div>
+        <div class="definition">
+          Causal Impact is the application of data science to measure the effect any 
+          event has on your business when an A/B test is not possible.
+        </div>
+      </div>
+      <div class="search">
+        <div class="search-label">FIND PREVIOUS TESTS</div>
+        <div style="position: relative;">
+          <input class="form-control"
+            [value]="search" (input)="onSearchChange($any($event.target).value)"/>
+          <i class="fa fa-search"></i>
+          <i *ngIf="search !== null" class="fa fa-times-circle" (click)="onSearchClear()"></i>
+        </div>
+      </div>
+
+      <div class="search-button">
+        <div style="position: relative;">
+          <button class="btn-search" (click)="onSearch()">Search</button>
+        </div>
+      </div>
+
+      <button class="btn-yellow" style="vertical-align: top; margin-top: 45px; margin-left: 60px;" 
+        (click)="newTest()">START NEW TEST</button>
+
+    </div>
+  </div>
+
+  <ng-container *ngIf="activePage === 'setup'">
+    <div class="container-secondary start-container">
+      <div class="start-content">
+        <div>
+          <div class="test-definition">
+            Test Definition
+          </div>
+          <div class="works-container">
+            <div class="works-label">HOW IT WORKS</div>
+            <div class="works-notes">Causal Impact creates a prediction of what performance would have been had no event 
+              occurred and measures your actual performance compared to that prediction.
+            </div>
+          </div>
+        </div>
+          
+        <div class="grouping">
+          <label class="top">SELECT CLIENT</label>
+          <mat-form-field class="medium" style="width: 250px;">
+            <mat-select autofilled
+              [value]="causalTest.client_id" (selectionChange)="onChangeTestParameter('client_id', $any($event).value)">
+              <mat-option *ngFor="let client of clients" [value]="client.id">{{client.name}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="grouping">
+          <div class="test-name" style="display: inline-block;">
+            <label class="top">ASSIGN A NAME</label>
+            <input class="form-control" [ngClass]="test_name_error ? 'error' : ''" placeholder="Enter a name for the Test"
+              [value]="causalTest.name" (change)="onChangeName($any($event.target).value)"/>
+          </div>    
+    
+          <div class="analysis-type">
+            <label class="top">TYPE OF ANALYSIS</label>
+            <mat-form-field class="medium" style="width: 250px;">
+              <mat-select autofilled
+                [value]="causalTest.analysis_type" (selectionChange)="onChangeTestParameter('analysis_type', $any($event).value)">
+                <mat-option *ngFor="let analysisType of analysisTypes" [value]="analysisType.id">{{analysisType.label}}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </div>
+
+        <div class="grouping">
+          <div class="event-date-content">
+            <label class="top">EVENT DATE</label>
+            <div class="value">
+              <input type="text" class="form-control"
+                  #dp="bsDatepicker" bsDatepicker 
+                  [bsValue]="causalTest.event_date" (bsValueChange)="onChangeTestParameter('event_date', $event)"
+                  [bsConfig]="{ adaptivePosition: true, showWeekNumbers: false, containerClass: 'theme-default'}">
+              <i class="fa fa-calendar" (click)="dp.show()"></i>
+            </div>  
+          </div>
+          <div class="pre-post-content">
+            <label class="top">PRE-PERIOD</label>
+            <input type="text" class="form-control" [value]="causalTest.pre_period"
+            (change)="onChangeTestParameter('pre_period', $any($event.target).value)">
+            <div class="pre-post-date">{{causalTest.pre_period_date}}</div>
+          </div>
+          <div class="pre-post-content">
+            <label class="top">POST-PERIOD</label>
+            <input type="text" class="form-control" [value]="causalTest.post_period"
+            (change)="onChangeTestParameter('post_period', $any($event.target).value)">
+            <div class="pre-post-date">{{causalTest.post_period_date}}</div>
+          </div>
+        </div>
+
+        <div class="grouping">
+          <div class="hypothesis-content">
+            <label class="top">HYPOTHESIS</label>
+            <input class="form-control"
+              [value]="causalTest.hypothesys" (change)="onChangeTestParameter('hypothesys', $any($event.target).value)"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-primary">
+      <div class="data-management">Data Management</div>
+
+      <div style="padding-bottom: 30px;">
+        <div class="flow-box">
+          <img src="assets/icons/PACIFIC-Platform-CI-Process1.svg"/>
+          <div class="flow-label">DOWNLOAD CITEMPLATE.CSV FILE</div>
+        </div>
+
+        <div class="flow-box">
+          <img src="assets/icons/PACIFIC-Platform-CI-Process2.svg"/>
+          <div class="flow-label">OPEN CITEMPLATE.CSV FILE ON EXCEL</div>
+        </div>
+        
+        <div class="flow-box">
+          <img src="assets/icons/PACIFIC-Platform-CI-Process3.svg"/>
+          <div class="flow-label">COPY + PASTE CLIENT DATA TO TEMPLATE</div>
+        </div>
+        
+        <div class="flow-box">
+          <img src="assets/icons/PACIFIC-Platform-CI-Process4.svg"/>
+          <div class="flow-label">SAVE THE TEMPLATE WITH A NEW NAME</div>
+        </div>
+        
+        <div class="flow-box">
+          <img src="assets/icons/PACIFIC-Platform-CI-Process5.svg"/>
+          <div class="flow-label">IMPORT NEW SAVED FILE TO THE PLATFORM</div>
+        </div>
+      </div>
+        
+      <div class="template">
+        <div class="template-box">
+          <button class="btn-yellow" (click)="createTemplateCsv()">DOWNLOAD TEMPLATES</button>
+          <div class="template-notes">To make things easier this part of the process will create two template file (in .csv format) that you can fill in with user data to feed the next stage in the process.</div>
+        </div>
+      </div>
+
+      <div class="test-data">
+        <div class="filename-container">
+          <div class="filename-content">
+            <i class="fa fa-upload"></i>
+            <div class="file-field md-formx" style="display: inline-block; padding-left: 15px;">
+              <input type="file" accept=".csv" (change)="onFileSelected($event)" >
+            </div>
+          </div>
+        </div>
+    
+        <div style="display: inline-block; padding: 5px 0 0 50px;">
+          <button class="btn-blue" style="margin-bottom: 0;" (click)="importTestOutputs()">IMPORT TEST DATA</button>
+          <div style="padding-top: 10px; padding-left: 15px">
+            <mat-checkbox 
+              [checked]="clearSourceData" 
+              (change)="onChangeClearSourceData($event)">Clear previous data</mat-checkbox>
+          </div>
+        </div>
+
+        <div class="status-container">
+          <div class="status-content">
+            <div *ngIf="importPctComplete > 0" style="display: inline-block; width: 300px; vertical-align: top; font-size: 11px; padding-top: 15px;">
+              {{selectedFileName}}
+            </div>
+            <div style="display: inline-block;">
+              <div class="importing" *ngIf="importPctComplete > 0">IMPORTING</div>
+              <div class="bar-container" style="display: inline-block;" *ngIf="importPctComplete > 0">
+                <div class="bar" [ngStyle]="{'width': importPctComplete + '%'}"></div>
+              </div>
+            </div>
+            <div class="import-count" (click)="onShowTestOutputs()" >
+              <div *ngIf="importCount > 0" style="display: inline-block; padding-right: 5px;">{{importCountPre}} <b>{{importCount | number}}</b></div>
+              <div style="display: inline-block; font-style: italic;">{{importCountPost}}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-secondary actions-container">
+      <div class="actions-content">
+        <div style="padding-top: 0px">
+          <button class="btn-yellow" 
+           (click)="onRunTest(causalTest.id, causalTest.name, causalTest.event_date, causalTest.pre_period, causalTest.post_period)">RUN TEST</button>
+        </div>
+      </div> 
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="activePage === 'results'">
+    <div class="container-secondary showing-results-container">
+      <div class="showing-results-content">
+        <div>
+          <div class="title">SHOWING RESULTS FOR</div>
+          <div class="name">{{searchFilter}}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-primary results-container">
+      <div class="results-content">
+        <div class="content-header">Active Tests</div>
+        <div class="list-container">
+          <div *ngIf="results && results.length > 0" class="list">
+            <div class="row headers">
+              <div style="width: 10%" (click)="sortResults('client_name');">CLIENT
+                <i *ngIf="sortField === 'client_name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'client_name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 35%;" (click)="sortResults('name');">TEST NAME
+                <i *ngIf="sortField === 'name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 10%; text-align: center" (click)="sortResults('c.date_updated');">DATE OF TEST
+                <i *ngIf="sortField === 'c.date_updated' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'c.date_updated' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 13%; text-align: center" (click)="sortResults('author_last_name');">AUTHOR
+                <i *ngIf="sortField === 'author_last_name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'author_last_name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 13%; text-align: center" (click)="sortResults('analysis_type');">TYPE OF ANALYSIS
+                <i *ngIf="sortField === 'analysis_type' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'analysis_type' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 15%; text-align: center" (click)="sortResults('progress');">PROGRESS
+                <i *ngIf="sortField === 'progress' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'progress' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 4%">
+              </div>
+            </div>
+            
+            <div *ngFor="let result of results" class="row data">
+              <div class="summary" style="width: 10%" matTooltip="{{result.client_name}}">{{result.client_code}}</div>
+              <div class="summary link" style="width: 35%;" (click)="executeTest(result)">{{result.name}}</div>
+              <div class="summary" style="width: 10%; text-align: center">{{result.date_updated_formatted}}</div>
+              <div class="summary" style="width: 13%; text-align: center">{{result.author_first_name}} {{result.author_last_name}}</div>
+              <div class="summary" style="width: 13%; text-align: center">{{result.analysis_type_label}}</div>
+              <div class="summary" style="width: 15%; text-align: center; padding: 1px 15px 0 10px;">
+                <div *ngIf="result.pct_complete === 100" (click)="executeTest(result)" class="view-results">
+                  VIEW RESULTS
+                </div>
+                <div *ngIf="result.pct_complete === 0" (click)="onRunTest(result.id, result.name, result.event_date, result.pre_period, result.post_period)" class="submit-test">
+                  RUN TEST</div>
+                <div *ngIf="result.pct_complete > 0 && result.pct_complete < 100">
+                  <div class="bar-container" style="display: inline-block;" matTooltip="{{result.pct_complete}}% Complete">
+                    <div class="bar" [ngStyle]="{'width': result.pct_complete + '%'}"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="summary" style="width: 4%;">
+                <i class="fa fa-pencil" (click)="onEditParameters(result.id)" matTooltip="Edit Test Setup"></i>
+                <i *ngIf="result.pct_complete > 0 && result.pct_complete < 100" class="fa fa-refresh" (click)="onRefresh(result.id)" matTooltip="Refresh Status"></i>
+                <i *ngIf="result.pct_complete === 100" class="fa fa-archive" (click)="onArchive(result.id, result.name)" matTooltip="Archive Test"></i>
+                <i *ngIf="result.pct_complete === 0" class="fa fa-trash" (click)="onDelete(result.id, result.name)" matTooltip="Delete Test"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="container-secondary results-container">
+      <div class="results-content">
+        <div class="content-header" style="cursor: pointer;" (click)="onShowArchivedTests()">Completed Tests
+          <i *ngIf="!showArchivedTests" class="fa fa-chevron-down" style="padding-left: 15px; font-size: 22px;"></i>
+          <i *ngIf="showArchivedTests" class="fa fa-chevron-up" style="padding-left: 15px; font-size: 22px;"></i>
+        </div>
+        <div *ngIf="showArchivedTests" class="list-container">
+          <div *ngIf="archivedResults && archivedResults.length > 0" class="list">
+            <div class="row headers">
+              <div style="width: 10%" (click)="sortResults('client_name');">CLIENT
+                <i *ngIf="sortField === 'client_name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'client_name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 35%;" (click)="sortResults('name');">TEST NAME
+                <i *ngIf="sortField === 'name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 10%; text-align: center" (click)="sortResults('c.date_updated');">DATE OF TEST
+                <i *ngIf="sortField === 'c.date_updated' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'c.date_updated' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 13%; text-align: center" (click)="sortResults('author_last_name');">AUTHOR
+                <i *ngIf="sortField === 'author_last_name' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'author_last_name' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 13%; text-align: center" (click)="sortResults('analysis_type');">TYPE OF ANALYSIS
+                <i *ngIf="sortField === 'analysis_type' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'analysis_type' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 15%; text-align: center" (click)="sortResults('progress');">RESULTS
+                <i *ngIf="sortField === 'progress' && sortOrder === 'ASC'" class="fa fa-angle-up"></i>
+                <i *ngIf="sortField === 'progress' && sortOrder === 'DESC'" class="fa fa-angle-down"></i>
+              </div>
+              <div style="width: 4%">
+              </div>
+            </div>
+          
+            <div *ngFor="let result of archivedResults" class="row data">
+              <div class="summary" style="width: 10%" matTooltip="{{result.client_name}}">{{result.client_code}}</div>
+              <div class="summary link" style="width: 35%;" (click)="executeTest(result)">{{result.name}}</div>
+              <div class="summary" style="width: 10%; text-align: center">{{result.date_updated_formatted}}</div>
+              <div class="summary" style="width: 13%; text-align: center">{{result.author_first_name}} {{result.author_last_name}}</div>
+              <div class="summary" style="width: 13%; text-align: center">{{result.analysis_type_label}}</div>
+              <div class="summary" style="width: 15%; text-align: center; padding: 1px 15px 0 10px;">
+                <div *ngIf="result.pct_complete === 100" (click)="executeTest(result)" class="view-results">
+                  VIEW RESULTS
+                </div>
+                <div *ngIf="result.pct_complete === 0" (click)="onRunTest(result.id, result.name, result.event_date, result.pre_period, result.post_period)" class="submit-test">
+                  RUN TEST</div>
+                <div *ngIf="result.pct_complete > 0 && result.pct_complete < 100">
+                  <div class="bar-container" style="display: inline-block;" matTooltip="{{result.pct_complete}}% Complete">
+                    <div class="bar" [ngStyle]="{'width': result.pct_complete + '%'}"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="summary" style="width: 4%;">
+                <i class="fa fa-pencil" (click)="onEditParameters(result.id)" matTooltip="Edit Test Setup"></i>
+                <i class="fa fa-trash" (click)="onDelete(result.id, result.name)" matTooltip="Delete Test"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  
+    <!-- <div class="container-primary">
+      <button class="btn-yellow" (click)="newTest()">START NEW TEST</button>
+    </div> -->
+  </ng-container>
+
+  <ng-container *ngIf="activePage === 'charts'">
+    <div class="selected-container" >
+      <div class="selected-content" >
+        <div class="header-entry" style="text-align: left; width: 400px">
+          <div class="header-title">Test Name</div>
+          <div class="header-value">{{selectedTest.name}}</div>
+        </div>
+        <div class="header-entry">
+          <div class="header-title">Event Date</div>
+          <div class="header-value">{{selectedTest.event_date_formatted}}</div>
+        </div>
+        <div class="header-entry">
+          <div class="header-title">Pre-period</div>
+          <div class="header-value">{{selectedTest.pre_period}}</div>
+          <div class="header-sub">{{selectedTest.pre_period_date}}</div>
+        </div>
+        <div class="header-entry">
+          <div class="header-title">Post-period</div>
+          <div class="header-value">{{selectedTest.post_period}}</div>
+          <div class="header-sub">{{selectedTest.post_period_date}}</div>
+        </div>
+
+        <div class="header-btn">
+          <button class="btn-blue" (click)="onEditParameters(selectedTest.id)">EDIT TEST</button>
+        </div>
+
+        <div class="header-tab" style="text-align: left;">
+          <div class="small">
+            <i class="fa fa-file-text-o"></i>
+            <label class="title">Created:</label>
+            <label class="value">{{selectedTest.date_updated_formatted}}</label>
+          </div>
+          <div class="small" style="padding-left: 15px;">
+            <i class="fa fa-user"></i>
+            <label class="title">Author:</label>
+            <label class="value">{{selectedTest.author_first_name}} {{selectedTest.author_last_name}}</label>
+          </div>
+          <div class="small" style="padding-left: 15px;">
+            <i class="fa fa-cog"></i>
+            <label class="title">Causal Impact version:</label>
+            <label class="value">6.1</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-primary metrics-container">
+      <div class="metrics-content">
+        <div class="filter">
+          <div class="filter-title">CHOOSE METRIC</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedMetric" (selectionChange)="onMetricChange($any($event).value)">
+              <ng-container *ngFor="let metric of metricList">
+                <mat-option *ngIf="metric.visible" [value]="metric.id">{{metric.label}}</mat-option>
+              </ng-container>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter">
+          <div class="filter-title">SITE NAME</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedSiteName" (selectionChange)="onChartFilterChange('site_name', $any($event).value)">
+              <mat-option *ngFor="let site_name of chartFilters.site_name" [value]="site_name">{{site_name}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+  
+        <div class="filter">
+          <div class="filter-title">SEGMENT</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedSegment" (selectionChange)="onChartFilterChange('segment', $any($event).value)">
+              <mat-option *ngFor="let segment of chartFilters.segment" [value]="segment">{{segment}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter">
+          <div class="filter-title">LOB</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedPageLOB" (selectionChange)="onChartFilterChange('page_lob', $any($event).value)">
+              <mat-option *ngFor="let LOB of chartFilters.page_lob" [value]="LOB">{{LOB}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter">
+          <div class="filter-title">PAGE TYPE</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedPageType" (selectionChange)="onChartFilterChange('page_type', $any($event).value)">
+              <mat-option *ngFor="let page_type of chartFilters.page_type" [value]="page_type">{{page_type}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="filter">
+          <div class="filter-title">DEVICE</div>
+          <mat-form-field style="width: 150px;">
+            <mat-select autofilled [value]="selectedSitePlatform" (selectionChange)="onChartFilterChange('device', $any($event).value)">
+              <mat-option *ngFor="let site_platform of chartFilters.device" [value]="site_platform">{{site_platform}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </div>
+    </div>   
+         
+    <div class="container-primary summary-container">
+      <div class="summary-content">
+        <div class="title">
+          <label>Post-event Performance Summary</label>
+        </div>
+
+        <div style="display: inline-block;">
+          <div class="summary-left-box">
+            <div class="header">
+              <div style="display: inline-block">Statistical Significance</div> 
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['statsig']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result" [ngClass]="{'fair': summary_significance === 'No'}">{{summary_significance}}</div>
+          </div>
+  
+          <div class="summary-left-box">
+            <div class="header">
+              Absolute Impact
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['absoluteimpact']}}" matTooltipClass="causal"></i>
+            </div>
+            <div *ngIf="selectedMetric === 'br' || selectedMetric === 'war'" class="result" [ngClass]="{'bad': summary_absolute_impact > 0, 'fair': summary_significance === 'No'}">
+              <ng-container *ngIf="selectedMetric === 'br'">{{summary_absolute_impact | percent:'1.2'}}</ng-container>
+              <ng-container *ngIf="selectedMetric === 'war'">{{summary_absolute_impact | number:'1.1-1'}}</ng-container>
+            </div>
+            <div *ngIf="selectedMetric !== 'br' && selectedMetric !== 'war'" class="result" [ngClass]="{'bad': summary_absolute_impact < 0, 'fair': summary_significance === 'No'}">
+              <ng-container *ngIf="selectedMetric === 'ctr' || selectedMetric === 'cvr'">{{summary_absolute_impact | percent:'1.2'}}</ng-container>
+              <ng-container *ngIf="selectedMetric === 'aov'">{{summary_absolute_impact | currency:'USD'}}</ng-container>
+              <ng-container *ngIf="selectedMetric === 'revenue'">{{summary_absolute_impact | currency:'USD':true:'1.0-0'}}</ng-container>
+              <ng-container *ngIf="selectedMetric !== 'ctr' && selectedMetric !== 'cvr' && selectedMetric !== 'aov' && selectedMetric !== 'revenue'">{{summary_absolute_impact | number}}</ng-container>
+            </div>
+          </div>
+      
+          <div class="summary-left-box">
+            <div class="header">
+              Confidence Interval
+              <!-- <i class="fa fa-question-circle-o" matTooltip="{{hints['relativeimpact']}}" matTooltipClass="causal"></i> -->
+            </div>
+            <div class="result" [ngClass]="{'fair': summary_significance === 'No'}">{{summary_confidence | percent}} </div>
+          </div>
+    
+        </div>
+
+        <div class="summary-right-box">
+          <div class="summary-confidence">
+            <div class="header">
+              Relative Impact
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['relativeimpact']}}" matTooltipClass="causal"></i>
+            </div>
+            <div *ngIf="selectedMetric === 'br' || selectedMetric === 'war'" class="result" [ngClass]="{'bad': summary_relative_impact > 0, 'fair': summary_significance === 'No'}">{{summary_relative_impact | percent:'1.2'}} </div>
+            <div *ngIf="selectedMetric !== 'br' && selectedMetric !== 'war'" class="result" [ngClass]="{'bad': summary_relative_impact < 0, 'fair': summary_significance === 'No'}">{{summary_relative_impact | percent:'1.2'}} </div>
+          </div>
+          <div class="summary-explanation">
+            <div class="summary-explanation-title">Summary Explanation</div>
+            <div class="summary-explanation-text">{{summary_explanation}}</div>
+          </div>
+        </div>
+
+        <div style="padding-top: 20px;">
+          <div class="summary-box horizontal">
+            <div class="header horizontal">
+              <label>Metric</label>
+            </div>
+            <div class="result horizontal">
+              <label>{{selectedMetricMixed}}</label>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="header">
+              <label>Prediction</label>
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['prediction']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result">
+              <label *ngIf="selectedMetric !== 'br' && selectedMetric !== 'ctr' && selectedMetric !== 'cvr' && selectedMetric !== 'aov' && selectedMetric !== 'revenue' && selectedMetric !== 'war'">{{summary_prediction | number}}</label>
+              <label *ngIf="selectedMetric === 'br' || selectedMetric === 'ctr' || selectedMetric === 'cvr'">{{summary_prediction | percent:'1.0-2'}}</label>
+              <label *ngIf="selectedMetric === 'aov'">{{summary_prediction | currency:'USD':true}}</label>
+              <label *ngIf="selectedMetric === 'revenue' || selectedMetric === 'cvr'">{{summary_prediction | currency:'USD'}}</label>
+              <label *ngIf="selectedMetric === 'war'">{{summary_prediction |  number:'1.1-1'}}</label>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="header">
+              <label>Actual</label>
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['actual']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result">
+              <label *ngIf="selectedMetric !== 'br' && selectedMetric !== 'ctr' && selectedMetric !== 'cvr' && selectedMetric !== 'aov' && selectedMetric !== 'revenue' && selectedMetric !== 'war'">{{summary_actual | number}}</label>
+              <label *ngIf="selectedMetric === 'br' || selectedMetric === 'ctr' || selectedMetric === 'cvr'">{{summary_actual | percent:'1.0-2'}}</label>
+              <label *ngIf="selectedMetric === 'revenue'">{{summary_actual | currency:'USD':true:'1.0-0'}}</label>
+              <label *ngIf="selectedMetric === 'aov'">{{summary_actual | currency:'USD'}}</label> 
+              <label *ngIf="selectedMetric === 'war'">{{summary_actual | number:'1.1-1'}}</label>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="header">
+              <label>PY Actual</label>
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['py']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result">
+              <label *ngIf="selectedMetric !== 'br' && selectedMetric !== 'ctr' && selectedMetric !== 'cvr' && selectedMetric !== 'aov' && selectedMetric !== 'revenue' && selectedMetric !== 'war'">{{summary_py_actual | number}}</label>
+              <label *ngIf="selectedMetric === 'br' || selectedMetric === 'ctr' || selectedMetric === 'cvr'">{{summary_py_actual | percent:'1.0-2'}}</label>
+              <label *ngIf="selectedMetric === 'revenue'">{{summary_py_actual | currency:'USD':true:'1.0-0'}}</label>
+              <label *ngIf="selectedMetric === 'aov'">{{summary_py_actual | currency:'USD':true:'1.0-2'}}</label>
+              <label *ngIf="selectedMetric === 'war'">{{summary_py_actual | number:'1.1-1'}}</label>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="header">
+              <label>YoY</label>
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['yoy']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result">
+              <label>{{summary_yoy | percent:'1.0-2'}}</label>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <div class="header">
+              <label>Synthetic Input</label>
+              <i class="fa fa-question-circle-o" matTooltip="{{hints['synthetic']}}" matTooltipClass="causal"></i>
+            </div>
+            <div class="result">
+              <label>{{summary_synthetic}}</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-container">
+      <div class="charts-content">
+        <div>
+
+          <div style="padding: 0px 10px">
+            <div class="chart-header" (click)="onHideOriginal()">Performance
+              <i class="fa fa-question-circle-o" style="padding-left: 4px" matTooltip="{{hints['originalPlot']}}" matTooltipClass="causal"></i>
+            </div>
+            <ng-container *ngIf="showOriginalChart">
+              <div class="chart-legend">
+                <div class="series" matTooltip="{{hints['originalMargin']}}" matTooltipClass="causal">
+                  <div class="series-mark" style="background-color: #55fdbf5c; height: 14px; top: 4px;"></div>
+                  <div class="series-label">Margin of Error</div>
+                </div>
+                <div class="series" style="padding-left: 40px" matTooltip="{{hints['originalActual']}}" matTooltipClass="causal">
+                  <div class="series-mark" style=" background-color: orange;"></div>
+                  <div class="series-label">Actual</div>
+                </div>
+                <div class="series" style="padding-left: 40px">
+                  <div class="series-mark" style="background-color: #50eef7;"></div>
+                  <div class="series-label">PY Actual</div>
+                </div>
+                <div class="series" style="padding-left: 40px" matTooltip="{{hints['originalPrediction']}}" matTooltipClass="causal">
+                  <div class="series-dash"></div>
+                  <div class="series-label">Prediction</div>
+                </div>
+              </div>
+
+              <div class="chart-container" style="margin-bottom: 20px;">
+                <div class="chart-content">
+                  <!-- <div class="chart" *ngIf="authorUserId !== 29 && chart1Values.length > 0">
+                    <canvas baseChart
+                            [type]="'line'"
+                            [datasets]="chart1Values"
+                            [labels]="chartLabels"
+                            [options]="chartOptions">
+                    </canvas>
+                  </div>   -->
+
+                  <div id="performanceChart" style="width: 100%; height: 270px"></div>
+                </div>
+
+              </div>
+            </ng-container>
+          </div>
+          
+          <div style="padding: 0px 10px">
+            <div class="chart-header" (click)="onHidePointwise()">Daily Impact
+              <i class="fa fa-question-circle-o" style="padding-left: 4px" matTooltip="{{hints['pointwisePlot']}}" matTooltipClass="causal"></i>
+            </div>
+            <ng-container *ngIf="showPointwiseChart">
+              <div class="chart-legend">
+                <div class="series" matTooltip="{{hints['pointwiseMargin']}}" matTooltipClass="causal">
+                  <div class="series-mark" style="background-color: #55fdbf5c;"></div>
+                  <div class="series-label">Margin of Error</div>
+                </div>
+                <div class="series" style="padding-left: 40px" matTooltip="{{hints['pointwiseActual']}}" matTooltipClass="causal">
+                  <div class="series2-dash"></div>
+                  <div class="series-label">Actual</div>
+                </div>
+              </div>
+
+              <div class="chart-container" style="margin-bottom: 20px;">
+                <div class="chart-content">
+                  <!-- <div class="chart" *ngIf="authorUserId !== 29 && chart3Values.length > 0">
+                    <canvas baseChart
+                            [type]="'line'"
+                            [datasets]="chart3Values"
+                            [labels]="chartLabels"
+                            [options]="chartOptions"
+                            [plugins]="barChartPlugins">
+                    </canvas>
+                  </div>  -->
+                       
+                  <div id="pointwiseChart" style="width: 100%; height: 270px"></div>
+                </div>
+              </div>
+            </ng-container>
+          </div>          
+
+          <div *ngIf="['impressions', 'clicks', 'visitors', 'orders', 'bounces', 'revenue'].indexOf(selectedMetric) >= 0" style="padding: 0px 10px">
+            <div class="chart-header" (click)="onHideCumulative()">Cumulative Impact
+              <i class="fa fa-question-circle-o" style="padding-left: 4px" matTooltip="{{hints['cumulativePlot']}}" matTooltipClass="causal"></i>
+            </div>
+            <ng-container *ngIf="showCumulativeChart">
+              <div class="chart-legend">
+                <div class="series" matTooltip="{{hints['cumulativeMargin']}}" matTooltipClass="causal">
+                  <div class="series-mark" style="background-color: #55fdbf5c;"></div>
+                  <div class="series-label">Margin of Error</div>
+                </div>
+                <div class="series" style="padding-left: 40px" matTooltip="{{hints['cumulativeActual']}}" matTooltipClass="causal">
+                  <div class="series2-dash"></div>
+                  <div class="series-label">Actual</div>
+                </div>
+              </div>
+
+              <div class="chart-container" style="margin-bottom: 20px;">
+                <div class="chart-content">
+                  <!-- <div class="chart" *ngIf="authorUserId !== 29 && chart2Values.length > 0">
+                    <canvas baseChart
+                            [type]="'line'"
+                            [datasets]="chart2Values"
+                            [labels]="chartLabels"
+                            [options]="chartOptions"
+                            [plugins]="barChartPlugins">
+                    </canvas>
+                  </div>  -->
+                                         
+                  <div id="cummulativeChart" style="width: 100%; height: 270px"></div>
+                   
+                </div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="actions-container" style="padding-top: 20px">
+          <button class="btn-green" style="margin-right: 10px" (click)="onExportSource()">
+            <i class="fa fa-download" style="padding-right: 5px;"></i>
+            Export Source
+          </button>
+          <!-- <button class="btn-green" (click)="onExportOutput()">
+            <i class="fa fa-download" style="padding-right: 5px;"></i>
+            Export Chart Data
+          </button> -->
+        </div>
+        
+      </div>
+    </div>
+        
+    
+  </ng-container>      
+
+</div>

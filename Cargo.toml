@@ -1,0 +1,16 @@
+[package]
+name = "routes-scraper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.71"
+lazy_static = "1.4.0"
+regex = "1.8.2"
+swc_common = "0.31.11"
+swc_ecma_ast = "0.104.4"
+swc_ecma_parser = "0.134.10"
+thiserror = "1.0.40"
+
+[dev-dependencies]
+include-bytes-plus = "1.0.3"

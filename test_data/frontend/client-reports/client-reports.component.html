@@ -1,0 +1,668 @@
+<div class="content">
+  <ng-container *ngIf="activePage === 'results'">
+    <div class="container-primary search-container">
+      <div class="search-content">
+        <div class="icon">
+          <img src="assets/icons/Client-Reporting-Header-Icon.svg" style="width: 24px"/>
+        </div>
+        <div class="description">
+          <div class="title">Client Reports</div>
+          <div class="definition">
+            This will provide a considated view of any client's tracking
+            data (from Google Search Console or Google Analytics).  All the information
+            found here has been retrieved from the Google API, followed by a categorization
+            process that will help to provide consolidated reorting based on customizable
+            business attributes.  Access to the Google APIs for the selected client must
+            be established before anything will appear here.
+          </div>
+        </div>
+
+        <div *ngIf="user_client_id === null" class="search">
+          <div class="search-label">SEARCH CLIENT DATABASE</div>
+          <div style="position: relative;">
+            <input class="form-control"
+              [value]="search" (input)="onSearchChange($any($event.target).value)"/>
+            <i class="fa fa-search"></i>
+            <i *ngIf="search !== null" class="fa fa-times-circle" (click)="onSearchClear()"></i>
+          </div>
+        </div>
+
+        <div *ngIf="user_client_id === null" class="search-button">
+          <div style="position: relative;">
+            <button class="btn-search" (click)="onSearch()">Search</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container-secondary active-container">
+      <div class="active-content">
+        <div class="header">
+          <label class="label">Current API Clients</label>
+        </div>
+        <div class="list-container">
+          <div *ngIf="clients.length === 0" class="no-list">
+            There are no Active Clients matching search criteria
+          </div>
+
+          <div *ngIf="clients && clients.length > 0" class="list" style="clear: both">
+            <ng-container *ngFor="let client of clients; let ci = index">
+              <div *ngIf="client.last_run_date !== null" class="active-client" (click)="loadClientDetails(ci)">
+                <div class="picture-container">
+                  <img *ngIf="client.acronym !== null" class="picture" src="assets/logos/{{client.acronym}}.svg"/>
+                </div>
+                <div class="client-attributes">
+                  <div style="padding-top: 10px">
+                    <div class="header">CLIENT NAME</div>
+                    <div class="value">{{client.name}}</div>
+                  </div>
+                  <div class="client-attributes" style="padding-top: 10px; width: 100px">
+                    <div class="header">CLIENT ID</div>
+                    <div class="value" style="width: 100px">{{client.acronym}}</div>
+                  </div>
+                </div>
+                <div class="client-attributes" style="padding-top: 10px; width: 100px">
+                  <div class="header">LAST RUN DATE</div>
+                  <div class="value" style="width: 100px">{{client.last_run_date}}</div>
+                </div>
+
+              </div>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="activePage !== 'results'">
+    <div class="container-primary search-container">
+      <div class="search-content">
+        <div class="icon">
+          <img src="assets/icons/Client-Reporting-Header-Icon.svg" style="width: 24px"/>
+        </div>
+        <div class="description" style="width: 435px">
+          <div class="title">Your Performance</div>
+          <div class="definition" style="font-size: 12px;">
+            This will provide a considated view of any client's tracking data (from Google Search Console or Google Analytics).
+          </div>
+        </div>
+
+        <div class="logo-container" style="overflow: hidden">
+          <img *ngIf="selectedClient.acronym !== null" class="logo" style="height: 200px; position: relative; top: -60px" src="assets/logos/{{selectedClient.acronym}}.svg"/>
+        </div>
+
+        <div *ngIf="user_client_id === null" style="display: inline-block;">
+          <button class="btn-yellow" (click)="onSearch()">Back to List</button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="container-primary" style="width: 100%; padding: 0">
+      <div class="tabs-container">
+        <div class="tabs">
+          <ng-container *ngFor="let tab of tabs; let i = index">
+            <div class="tab" [ngClass]="selectedTabIndex === i ? 'selected' : ''" (click)="onTabSelect(i)">{{tab}}</div>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+
+    <ng-container *ngIf="selectedTabIndex === 0">
+      <div class="container-primary">
+        <div style="display: inline-block; margin-right: 5px; position: relative; width: 200px">
+          <div style="background-color: #ccc; padding: 16px 15px; font-weight: bold; border-radius: 4px; width: 200px; margin: 2px; height: 48px;">Dashboards
+          </div>
+
+          <div class="services-container">
+            <div *ngFor="let category of categories; let ti = index">
+              <div class="service" [ngClass]="{'selected': category.selected}" (click)="onSelectSummaryCategory(ti)">
+                <img class="service-icon" style="height: 18px; top: -1px;" src="assets/icons/Client-Reporting-{{category.name}}-Icon.svg"/>
+                <div class="service-name" style="font-size: 12px; padding-top: 1px;">{{category.label}}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: inline-block; width: 860px; border-radius: 6px; margin-left: 10px; background-color: #ddd; vertical-align: top;">
+          <div style="padding: 10px;">
+            <img class="service-icon" style="height: 18px;" src="assets/icons/Client-Reporting-{{selectedCategory.name}}-Icon.svg">
+            <div class="service-name" style="display: inline-block; font-size: 14px; font-weight: bold; padding-top: 1px; padding-left: 10px;">{{selectedCategory.label}}</div>
+            <ng-container *ngIf="selectedCategory.name === 'ExecSummary'">
+              <ng-container *ngIf="user_id !== 29 && user_id !== 33">
+              <div style="padding: 10px">
+                <div style="background-color: white; border-radius: 4px;">
+                  <div style="padding: 10px 10px 0; width: 100%;">
+                    <div style="height: 50px">
+                      <div style="display: inline-block;">
+                        <div style="padding-left: 10px">
+                          <div class="chart-prior-btn" [ngClass]="{'selected': selectedPerformancePrior === 'ytd'}" (click)="onSelectPerformancePrior('ytd', 'YTD')">YTD</div>
+                          <div class="chart-prior-btn" [ngClass]="{'selected': selectedPerformancePrior === 'mtd'}" (click)="onSelectPerformancePrior('mtd', 'MTD')">MTD</div>
+                          <div class="chart-prior-btn" [ngClass]="{'selected': selectedPerformancePrior === 'lastqtr'}" (click)="onSelectPerformancePrior('lastqtr', 'Last QTR')">Last QTR</div>
+                          <div class="chart-prior-btn" [ngClass]="{'selected': selectedPerformancePrior === 'past90'}" (click)="onSelectPerformancePrior('past90', 'Past 90')">Past 90</div>
+                        </div>
+                        <img class="service-icon" style="height: 18px; padding-left: 10px" src="assets/icons/ClientReporting-PerformanceToPrior-Icon.svg">
+                        <div class="service-name" style="display: inline-block; font-size: 14px; font-weight: bold; padding-top: 10px; padding: 15px 10px;">Comparing Performance to</div>
+                        <mat-form-field style="display: inline-block; width: 150px;">
+                          <mat-select autofilled [value]="selectedPriorPeriod" (selectionChange)="onChangePriorPeriod($any($event).value)">
+                            <mat-option value="YEAR">Prior Year</mat-option>
+                            <mat-option value="PERIOD">Previous Period</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+
+                      </div>
+                      <div style="float: right; font-size: 11px; padding: 5px 10px 3px; border: 1px solid #ccc; border-radius: 6px; background-color: #f4f4f4;">
+                        <div style="display: inline-block;">
+                          <div style="display: inline-block; padding-right: 5px; width: 50px;">Current:</div>
+                          <div style="display: inline-block; width: 60px;">{{current_start_date}}</div>
+                            -
+                          <div style="display: inline-block; width: 60px;">{{current_end_date}}</div>
+                        </div>
+                        <div>
+                          <div style="display: inline-block; padding-right: 5px; width: 50px;">Prior:</div>
+                          <div style="display: inline-block; width: 60px;">{{prior_start_date}}</div>
+                            -
+                          <div style="display: inline-block; width: 60px;">{{prior_end_date}}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="chart">
+                      <ng-container *ngIf="performancePriorChartValues.length > 0">
+                        <canvas baseChart
+                          [type]="'bar'"
+                          [datasets]="performancePriorChartValues"
+                          [labels]="performancePriorChartLabels"
+                          [options]="performancePriorChartOptions"
+                          [plugins]="barChartPlugins">
+                        </canvas>
+                      </ng-container>
+                    </div>
+
+                  </div>
+
+                  <div class="performance-metric-actions">
+                    <div *ngFor="let priorMetric of priorMetrics;" class="performance-metric-container" [ngStyle]="{'width': 'calc(' + (100 / priorMetrics.length) + '% - 9px)'}">
+                      <div class="performance-metric" [ngClass]="{'selected': selectedPerformanceMetric === priorMetric.name}" (click)="onSelectPerformanceMetric(priorMetric.name)">{{priorMetric.label}}</div>
+                    </div>
+                  </div>
+
+                  <div style="color: #aaa; width: 100%; text-align: center; padding: 15px 0 25px; font-size: 9px; font-weight: bold;">
+                    Sources: Google Search Console URL / Google Analytics
+                  </div>
+
+                  <div style="padding: 10px; width: 100%;">
+                    <img class="service-icon" style="height: 18px; padding-left: 10px" src="assets/icons/ClientReporting-{{selectedPerformanceMetric}}-Icon.svg">
+                    <div class="service-name" style="display: inline-block; font-size: 14px; font-weight: bold; padding-top: 1px; padding-left: 10px;">{{selectedPerformanceMetricLabel}}</div>
+                    <div style="display: inline-block; padding-left: 10px">
+                      <div class="chart-view-btn selected">TRENDED VIEW</div>
+                    </div>
+
+                    <div class="chart">
+                      <ng-container *ngIf="trendedViewChartValues.length > 0">
+                        <canvas baseChart
+                          [type]="'line'"
+                          [datasets]="trendedViewChartValues"
+                          [labels]="trendedViewChartLabels"
+                          [options]="trendedViewChartOptions"
+                          [plugins]="barChartPlugins" >
+                        </canvas>
+                      </ng-container>
+                    </div>
+                  </div>
+
+                  <div style="color: #aaa; width: 100%; text-align: center; padding: 15px 0 25px; font-size: 9px; font-weight: bold;">
+                    Sources: Google Search Console URL / Google Analytics
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding-top: 10px">
+                <div style="display: inline-block; width: 250px; font-size: 13px; font-weight: bold; text-align: center; vertical-align: top; padding-top: 15px;">What do we do with your data?</div>
+                <div style="display: inline-block; width: 500px; font-size: 11px;">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</div>
+              </div>
+            </ng-container>
+
+
+            <div *ngIf="user_id === 29 || user_id === 33" style="width: 100%; text-align: center;">
+              <div class="client-performance">
+                <div class="portlet" style="padding-left: 5px; padding-right: 0">
+         
+                  <div class="client-chart-container">
+                    <div class="client-chart-content">
+          
+                      <div class="client-chart-selectors">
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === 'max'}" (click)="onSelectDateRange('max')">MAX</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === '1Y'}" (click)="onSelectDateRange('1Y')">1Y</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === '3M'}" (click)="onSelectDateRange('3M')">3M</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === '1M'}" (click)="onSelectDateRange('1M')">1M</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === '1W'}" (click)="onSelectDateRange('1W')">1W</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === 'ytd'}" (click)="onSelectDateRange('ytd')">YTD</div>
+                        <div class="chart-prior-btn" [ngClass]="{'selected': selectedDateRange === 'custom'}" (click)="onSelectDateRange('custom')">Custom</div>
+                      </div>
+                      <div class="client-chart-dates">
+                        <ng-container *ngIf="savedDateRanges.range1.dateRange !== null">
+                          <div class="client-chart-date-range" style="width: 215px; text-align: left;">
+                            <div class="client-chart-date">{{savedDateRanges.range1.dateRange}}</div>
+                            <div *ngIf="savedDateRanges.range2.dateRange !== null" class="client-chart-date">{{savedDateRanges.range2.dateRange}}</div>
+                            <div class="client-chart-change" (click)="onSelectDateRange('custom')">change</div>
+                          </div>
+                        </ng-container>
+                      </div>
+                      <div *ngIf="showCustomDatePopup" class="client-chart-date-popup">
+                        <div style="display: inline-block;">
+                          <ngx-daterangepicker-material
+                            [autoApply]="true"
+                            [startDate]="workingDateRanges.range1.startDate"
+                            [endDate]="workingDateRanges.range1.endDate"
+                            (startDateChanged)="onStartDateChanged($event)"
+                            (endDateChanged)="onEndDateChanged($event)"
+                            [locale]="{ applyLabel: '', firstDay: 1 }">
+                          </ngx-daterangepicker-material>
+                        </div>
+                        
+                        <div style="display: inline-block; vertical-align: top; padding-left: 20px">
+                          <div style="height: 175px; padding-top: 5px; vertical-align: top;">
+                            <mat-checkbox style="position: relative; top: -5px; left: -5px" [checked]="compareToPrevious" 
+                              (change)="onCompareToPrevious()">
+                              
+                            </mat-checkbox>
+                            <div style="display: inline-block; width: 85px; font-size: 11px; line-height: 1.2;">Compare to previous:</div>
+                           
+                            <mat-form-field style="width: 80px; vertical-align: top;">
+                              <mat-select [disabled]="!compareToPrevious" autofilled [value]="workingDateRanges.compareTo" (selectionChange)="onChangeCompareTo($any($event).value)">
+                                <mat-option [value]="''">Select</mat-option>
+                                <mat-option [value]="'period'">Period</mat-option>
+                                <mat-option [value]="'year'">Year</mat-option>
+                              </mat-select>
+                            </mat-form-field>
+          
+                            <div style="font-size: 11px; text-align: center; padding-top: 20px">
+                              <ng-container *ngIf="workingDateRanges.range1.dateRange !== null">
+                                <div style="padding-top: 10px">{{workingDateRanges.range1.dateRange}}</div>
+                                <ng-container *ngIf="workingDateRanges.range2.dateRange !== null">
+                                  <div style="padding-top: 5px">vs.</div>
+                                  <div style="padding-top: 5px">{{workingDateRanges.range2.dateRange}}</div>
+                                </ng-container>
+                              </ng-container>
+                            </div>
+                          </div>
+                          <div style="float: right;">
+                            <button class="btn-small" style="margin-right: 10px;" (click)="onCancelCustomDatePopup()">Cancel</button>
+                            <button class="btn-small" (click)="onApplyCustomDatePopup()">Apply</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="float: right; padding-top: 7px">
+                        <img *ngIf="showAnnotations" (click)="onShowAnnotations()" style="width: 14px; margin-right: 15px; opacity: .5;" src="assets/icons/annotationOn.svg" matTooltip="Turn OFF Annotations"/>
+                        <img *ngIf="!showAnnotations" (click)="onShowAnnotations()" style="width: 14px; margin-right: 15px; opacity: .3;" src="assets/icons/annotationOff.svg" matTooltip="Turn ON Annotations"/>
+                        <mat-form-field style="width: 120px;">
+                          <mat-select autofilled [value]="'clicks'" (selectionChange)="onChangeClientMetric($any($event).value)">
+                              <mat-option [value]="'clicks'">Clicks</mat-option>
+                              <mat-option [value]="'impressions'">Impressions</mat-option>
+                              <mat-option [value]="'ctr'">CTR</mat-option>
+                            </mat-select>
+                        </mat-form-field>
+            
+                      </div>
+          
+                    </div>
+          
+                    <div class="chart" style="height: 300px">
+                      <div id="clientApiChart" style="width: 100%; height: 270px"></div>
+                    </div> 
+          
+                    <div class="engaged">
+                      <div class="engaged-since">Engaged Since:</div>
+                      <div class="engaged-date">{{pacificStartDate | date: 'mediumDate'}}</div>
+                    </div>
+                    <div class="client-metrics">
+                      <div class="client-metric-name">{{selectedClientMetricLabel}}</div>
+                      <div class="client-metric">
+                        <div class="client-metric-label">52-wk day high:</div>
+                        <div class="client-metric-value">
+                          <ng-container *ngIf="selectedClientMetric !== 'ctr'">{{ytdMax | number: '1.0-0'}}</ng-container>
+                          <ng-container *ngIf="selectedClientMetric === 'ctr'">{{ytdMax | number: '1.2-2'}}%</ng-container>
+                        </div>
+                      </div>
+                      <div class="client-metric">
+                        <div class="client-metric-label">52-wk day lows:</div>
+                        <div class="client-metric-value">
+                        <ng-container *ngIf="selectedClientMetric !== 'ctr'">{{ytdMin | number: '1.0-0'}}</ng-container>
+                        <ng-container *ngIf="selectedClientMetric === 'ctr'">{{ytdMin | number: '1.2-2'}}%</ng-container>
+                      </div>
+                    </div>
+                      <div class="client-metric">
+                        <div class="client-metric-label">5-day avg. at start:</div>
+                        <div class="client-metric-value">
+                          <ng-container *ngIf="selectedClientMetric !== 'ctr'">{{avgStart | number: '1.0-0'}}</ng-container>
+                          <ng-container *ngIf="selectedClientMetric === 'ctr'">{{avgStart | number: '1.2-2'}}%</ng-container>
+                        </div>
+                      </div>
+                      <div class="client-metric">
+                        <div class="client-metric-label">5-day trailing avg:</div>
+                        <div class="client-metric-value">
+                          <ng-container *ngIf="selectedClientMetric !== 'ctr'">{{avgTrailing | number: '1.0-0'}}</ng-container>
+                          <ng-container *ngIf="selectedClientMetric === 'ctr'">{{avgTrailing | number: '1.2-2'}}%</ng-container>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+          
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+
+
+            <ng-container *ngIf="selectedCategory.name === 'SEOPerform'">
+              <div class="content-secondary" style="text-align: center; padding-top: 25px;">
+                <div class="filter-container">
+                  <div style="display: inline-block; width: 125px; padding-top: 7px;">DATE RANGE</div>
+                  <div style="display: inline-block; vertical-align: top;">
+                    <div style="display: inline-block; padding-right: 5px; font-size: 11px; color: #999;">FROM</div>
+                    <div class="date-field" style="display: inline-block;">
+                      <input type="text" class="form-control"
+                        #dp1="bsDatepicker" bsDatepicker
+                        [bsValue]="filters.from_date" (bsValueChange)="onChangeFilters('from_date', $event)"
+                        [bsConfig]="{ adaptivePosition: true, showWeekNumbers: false, containerClass: 'theme-default'}">
+                      <i class="fa fa-calendar" (click)="dp1.show()"></i>
+                    </div>
+                  </div>
+
+                  <div style="display: inline-block; vertical-align: top; padding-left: 20px">
+                    <div style="display: inline-block; padding-right: 5px; font-size: 11px; color: #999;">TO</div>
+                    <div class="date-field" style="display: inline-block;">
+                      <input type="text" class="form-control"
+                        #dp2="bsDatepicker" bsDatepicker
+                        [bsValue]="filters.to_date" (bsValueChange)="onChangeFilters('to_date', $event)"
+                        [bsConfig]="{ adaptivePosition: true, showWeekNumbers: false, containerClass: 'theme-default'}">
+                      <i class="fa fa-calendar" (click)="dp2.show()"></i>
+                    </div>
+                  </div>
+                  <div style="display: inline-block; padding-left: 40px">
+                    <div style="display: inline-block; padding-right: 5px; font-size: 11px; color: #999;">PRESET</div>
+                    <mat-form-field style="display: inline-block; width: 100px;">
+                      <mat-select autofilled [value]="filters.preset" (selectionChange)="onChangeFilters('preset', $any($event).value)">
+                        <mat-option value="MTD">MTD</mat-option>
+                        <mat-option value="QTD">QTD</mat-option>
+                        <mat-option value="YTD">YTD</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+
+                  </div>
+                </div>
+
+                <ng-container *ngIf="showAdvancedFilters">
+                  <div class="filter-container">
+                    <div style="display: inline-block; width: 125px; font-size: 12px; padding-top: 6px; vertical-align: top;">COMPARISON</div>
+                    <mat-radio-group style="display: inline-block; vertical-align: top;" [value]="selectedPriorPeriod" (change)="onChangePriorPeriod($any($event).value)">
+                      <mat-radio-button value="YEAR" style="padding-top: 4px" class="filter-entry" [ngClass]="{'selected': selectedPriorPeriod === 'YEAR'}">Prior Year</mat-radio-button>
+                      <mat-radio-button value="PERIOD" style="padding-left: 15px;" class="filter-entry" [ngClass]="{'selected': selectedPriorPeriod === 'PERIOD'}">Previous Period</mat-radio-button>
+                    </mat-radio-group>
+                  </div>
+
+                  <div class="filter-container" style="width: 50%;">
+                    <div style="display: inline-block; width: 125px; font-size: 12px; padding-top: 6px;">TYPE</div>
+                    <div style="padding-top: 2px; display: inline-block;">
+                      <mat-checkbox [checked]="filters.branded" (change)="onChangeFilters('branded', !filters.branded)" class="filter-entry" [ngClass]="{'selected': filters.branded}">Branded</mat-checkbox>
+                    </div>
+                    <div style="padding-top: 2px; padding-left: 15px; display: inline-block;">
+                      <mat-checkbox [checked]="filters.nonbranded" (change)="onChangeFilters('nonbranded', !filters.nonbranded)" class="filter-entry" [ngClass]="{'selected': filters.nonbranded}">Non-branded</mat-checkbox>
+                    </div>
+                  </div>
+
+                  <div class="filter-container" style="width: calc(50% - 8px);">
+                    <div style="display: inline-block; width: 100px; vertical-align: top; padding-top: 6px;">DEVICE</div>
+                    <div style="padding-top: 2px; display: inline-block;">
+                      <mat-checkbox [checked]="filters.mobile" (change)="onChangeFilters('mobile', !filters.mobile)" class="filter-entry" [ngClass]="{'selected': filters.mobile}">Mobile</mat-checkbox>
+                    </div>
+                    <div style="padding-top: 2px; padding-left: 15px; display: inline-block;">
+                      <mat-checkbox [checked]="filters.desktop" (change)="onChangeFilters('desktop', !filters.desktop)" class="filter-entry" [ngClass]="{'selected': filters.desktop}">Desktop</mat-checkbox>
+                    </div>
+                    <div style="padding-top: 2px; padding-left: 15px; display: inline-block;">
+                      <mat-checkbox [checked]="filters.tablet" (change)="onChangeFilters('tablet', !filters.tablet)" class="filter-entry" [ngClass]="{'selected': filters.tablet}">Tablet</mat-checkbox>
+                    </div>
+                  </div>
+
+                  <div style="background-color: #f4f4f4; padding: 10px 15px; font-weight: bold; border-radius: 4px; margin: 2px; height: 68px; text-align: left; display: inline-block; font-size: 12px; width: calc(100% - 4px); vertical-align: top;">
+
+                    <ng-container *ngFor="let filter of clientFilters; let fi = index;">
+                      <div *ngIf="filter.entries.length > 0" style="display: inline-block; padding-right: 10px;">
+                        <div style="padding: 0px 0 0px 5px; font-size: 11px;">{{filter.label}}</div>
+                        <mat-form-field style="width: 147px;">
+                          <mat-select autofilled multiple [value]="filter.selectedValue" (selectionChange)="onChangeFilterEntry(fi, $any($event).value)">
+                            <mat-option value="all">-- All --</mat-option>
+                            <mat-option *ngFor="let filterEntry of filter.entries" [value]="filterEntry.name">{{filterEntry.name}}</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                    </ng-container>
+                  </div>
+                </ng-container>
+
+                <div style="width: 100%; background-color: black; text-align: center;padding: 8px 0 6px 0; color: white; font-size: 10px; font-weight: bold; cursor: pointer; margin-top: 10px" (click)="onShowAdvanceFilters()">
+                  <div *ngIf="!showAdvancedFilters">
+                    SHOW ADVANCED OPTIONS
+                    <i class="fa fa-angle-down" style="font-size: 13px; font-weight: bold"></i>
+                  </div>
+                  <div *ngIf="showAdvancedFilters">
+                    HIDE ADVANCED OPTIONS
+                    <i class="fa fa-angle-up" style="font-size: 13px; font-weight: bold"></i>
+                  </div>
+                </div>
+
+                <div style="text-align: left; padding: 0 10px 0 15px">
+                  <div class="metric-header">
+                    Year to Date SEO Performance
+                  </div>
+                  <div *ngFor="let metric of seoMetrics" class="metric-container" [ngClass]="{'selected': metric.selected}" (click)="onChangePriorityMetric(metric.name)">
+                    <div class="metric-summary" matTooltip="Current Value: {{metric.current}}
+                    Previous Month: {{metric.prev_month}}
+                    Previous Year: {{metric.prev_year}}">
+                      <div class="metric-title">{{metric.label}}</div>
+                      <ng-container *ngIf="metric.name === 'war' || metric.name === 'position'">
+                        <div class="metric-value" [ngClass]="{'positive': metric.detail1 < 0, 'negative': metric.detail1 > 0}">
+                          {{metric.current}}
+                        </div>
+                      </ng-container>
+                      <ng-container *ngIf="metric.name !== 'war' && metric.name !== 'position'">
+                        <div class="metric-value" [ngClass]="{'positive': metric.detail1 > 0, 'negative': metric.detail1 < 0}">
+                          {{metric.current}}
+                        </div>
+                      </ng-container>
+                    </div>
+                    <div class="metric-details">
+                      <ng-container *ngIf="metric.name === 'war' || metric.name === 'position'">
+                        <div class="metric-detail-value" [ngClass]="{'positive': metric.detail1 < 0, 'negative': metric.detail1 > 0}">
+                          <i *ngIf="metric.detail1 >= 0" class="fa fa-arrow-up" style="padding-right: 5px"></i>
+                          <i *ngIf="metric.detail1 < 0" class="fa fa-arrow-down" style="padding-right: 5px"></i>{{metric.detail1 | number:'1.1-1'}}
+                        </div>
+                      </ng-container>
+                      <ng-container *ngIf="metric.name !== 'war' && metric.name !== 'position'">
+                        <div class="metric-detail-value" [ngClass]="{'positive': metric.detail1 > 0, 'negative': metric.detail1 < 0}">
+                          <i *ngIf="metric.detail1 >= 0" class="fa fa-arrow-up" style="padding-right: 5px"></i>
+                          <i *ngIf="metric.detail1 < 0" class="fa fa-arrow-down" style="padding-right: 5px"></i>{{metric.detail1 | percent}}
+                        </div>
+                      </ng-container>
+                      <div class="metric-detail-text">FROM PREVIOUS MONTH</div>
+                      <ng-container *ngIf="metric.name === 'war' || metric.name === 'position'">
+                        <div class="metric-detail-value" [ngClass]="{'positive': metric.detail2 < 0, 'negative': metric.detail2 > 0}">
+                          <i *ngIf="metric.detail2 >= 0" class="fa fa-arrow-up" style="padding-right: 5px"></i>
+                          <i *ngIf="metric.detail2 < 0" class="fa fa-arrow-down" style="padding-right: 5px"></i>{{metric.detail2 | number:'1.1-1'}}
+                        </div>
+                      </ng-container>
+                      <ng-container *ngIf="metric.name !== 'war' && metric.name !== 'position'">
+                        <div class="metric-detail-value" [ngClass]="{'positive': metric.detail2 > 0, 'negative': metric.detail2 < 0}">
+                          <i *ngIf="metric.detail2 >= 0" class="fa fa-arrow-up" style="padding-right: 5px"></i>
+                          <i *ngIf="metric.detail2 < 0" class="fa fa-arrow-down" style="padding-right: 5px"></i>
+                          {{metric.detail2 | percent}}
+                        </div>
+                      </ng-container>
+                      <div class="metric-detail-text">FROM PREVIOUS YEAR</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="portlet">
+                  <img class="title-icon" src="assets/icons/ClientReporting-PerformanceToPrior-Icon.svg">
+                  <div class="title-name">Performance by Priority Filter</div>
+                  <div style="float: right;">
+                    <div style="display: inline-block; padding-right: 15px;">
+                      <div style="display: inline-block; font-size: 12px; padding-right: 5px;">Metric</div>
+                      <mat-form-field style="width: 120px;">
+                        <mat-select autofilled [value]="selectedMetric.name" (selectionChange)="onChangePriorityMetric($any($event).value)">
+                          <mat-option *ngFor="let metric of seoMetrics" [value]="metric.name">{{metric.label}}</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+
+                    </div>
+                    <img *ngIf="showDetails.priorfilter" src="assets/icons/Collapse-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowDetails('priorfilter')" matTooltip="Hide Prior Filter details">
+                    <img *ngIf="!showDetails.priorfilter" src="assets/icons/Expand-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowDetails('priorfilter')" matTooltip="Show Prior Filter details">
+                  </div>
+
+                  <ng-container *ngIf="showDetails.priorfilter">
+                    <div class="chart">
+                      <ng-container *ngIf="priorityChartValues.length > 0">
+                        <canvas baseChart
+                          [type]="'bar'"
+                          [datasets]="priorityChartValues"
+                          [labels]="priorityChartLabels"
+                          [options]="priorityChartOptions">
+                        </canvas>
+                      </ng-container>
+                    </div>
+
+                  <!-- <div class="performance-metric-actions">
+                    <div *ngFor="let priorityFilter of priorityFilters" class="performance-metric-container">
+                      <div class="performance-metric">{{priorityFilter}}</div>
+                    </div>
+                  </div> -->
+
+                  </ng-container>
+
+                </div>
+
+                <div class="portlet" *ngIf="selectedClient.api_status === '1'">
+                  <img class="title-icon" src="assets/icons/ClientReporting-visitormix-Icon.svg">
+                  <div class="title-name">New User Mix</div>
+                  <div style="float: right;">
+                    <img *ngIf="showDetails.usermix" src="assets/icons/Collapse-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowDetails('usermix')" matTooltip="Hide User Mix details">
+                    <img *ngIf="!showDetails.usermix" src="assets/icons/Expand-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowDetails('usermix')" matTooltip="Show User Mix details">
+                  </div>
+
+                  <ng-container *ngIf="showDetails.usermix">
+                    <div class="chart">
+                    <div class="donut" *ngIf="newUsersChartValues.length > 0">
+                      <canvas baseChart
+                              [type]="'doughnut'"
+                              [labels]="newUsersChartLabels"
+                              [datasets]="newUsersChartValues"
+                              [options]="newUsersChartOptions">
+                      </canvas>
+                    </div>
+
+                    <div style="float: right">
+                      <div style="background-color: #f4f4f4; border-radius: 4px; padding: 10px; text-align: center; width: 200px; margin-bottom: 15px;">
+                        <div style="font-size: 11px; font-weight: bold">NEW VISITOR</div>
+                        <ng-container *ngIf="newUsersChange_new >= 0">
+                          <div style="color: #4FDB70; padding: 5px 0 0">
+                            <i class="fa fa-arrow-up" style="font-size: 16px; vertical-align: top; padding: 2px 5px 0 0"></i>
+                            <span style="font-size: 18px; font-weight: bold;">{{newUsersChange_new | percent}}</span>
+                          </div>
+                        </ng-container>
+                        <ng-container *ngIf="newUsersChange_new < 0">
+                          <div style="color: red; padding: 5px 0 0">
+                            <i class="fa fa-arrow-down" style="font-size: 16px; vertical-align: top; padding: 2px 5px 0 0"></i>
+                            <span style="font-size: 18px; font-weight: bold;">{{(newUsersChange_new * -1) | percent}}</span>
+                          </div>
+                        </ng-container>
+                        <div style="font-size: 10px; font-weight: bold">From previous 28 days</div>
+                      </div>
+                      <div style="background-color: #f4f4f4; border-radius: 4px; padding: 10px; text-align: center; width: 200px; margin-bottom: 15px;">
+                        <div style="font-size: 11px; font-weight: bold">RETURNING VISITOR</div>
+                        <ng-container *ngIf="newUsersChange_new >= 0">
+                          <div style="color: #4FDB70; padding: 5px 0 0">
+                            <i class="fa fa-arrow-up" style="font-size: 16px; vertical-align: top; padding: 2px 5px 0 0"></i>
+                            <span style="font-size: 18px; font-weight: bold;">{{newUsersChange_returning | percent}}</span>
+                          </div>
+                        </ng-container>
+                        <ng-container *ngIf="newUsersChange_new < 0">
+                          <div style="color: red; padding: 5px 0 0">
+                            <i class="fa fa-arrow-down" style="font-size: 16px; vertical-align: top; padding: 2px 5px 0 0"></i>
+                            <span style="font-size: 18px; font-weight: bold;">{{(newUsersChange_returning * -1) | percent}}</span>
+                          </div>
+                        </ng-container>
+                        <div style="font-size: 10px; font-weight: bold">From previous 28 days</div>
+                      </div>
+                      <!-- <div style="background-color: #f4f4f4; border-radius: 4px; padding: 5px; text-align: center;">
+                        <div>NEW VISITOR</div>
+                        <div>6.0%</div>
+                        <div>From previous year</div>
+                      </div> -->
+                    </div>
+                  </div>
+                  <div style="color: #aaa; width: 100%; text-align: center; padding: 15px 0 0px; font-size: 9px; font-weight: bold;">
+                    Source: Google Analytics
+                  </div>
+                 </ng-container>
+                </div>
+
+                <div *ngFor="let seoTrendingChart of seoTrendingChartValues; let si = index" class="portlet">
+                  <img class="title-icon" style="height: 18px; padding-left: 10px" src="assets/icons/ClientReporting-{{seoTrendingChart.name}}-Icon.svg">
+                  <!-- <img class="title-icon" src="assets/icons/ClientReporting-PerformanceToPrior-Icon.svg"> -->
+                  <div class="title-name">{{seoTrendingChart.label}}</div>
+                  <div style="float: right;">
+                    <img *ngIf="seoTrendingChart.show" src="assets/icons/Collapse-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowTrendingDetails(si)" matTooltip="Hide {{seoTrendingChart.label}} details">
+                    <img *ngIf="!seoTrendingChart.show" src="assets/icons/Expand-Arrow-Navy.svg" style="width: 16px; opacity: .6; cursor: pointer" (click)="onShowTrendingDetails(si)" matTooltip="Show {{seoTrendingChart.label}} details">
+                  </div>
+
+                  <ng-container *ngIf="seoTrendingChart.show">
+                    <div class="chart">
+                      <ng-container *ngIf="seoTrendingChart.visible">
+                        <canvas baseChart
+                          [type]="'line'"
+                          [datasets]="seoTrendingChart.dataset"
+                          [options]="seoTrendingChart.options"
+                          [plugins]="barChartPlugins">
+                        </canvas>
+                      </ng-container>
+                    </div>
+                  </ng-container>
+                </div>
+
+                </div>
+              </ng-container>
+
+            <ng-container *ngIf="selectedCategory.name === 'DataAcq'">
+              <div class="content-secondary" style="text-align: center; padding-top: 25px;">
+                <img src="assets/img/Under-Construction-page.svg" style="height: 300px; padding-bottom: 50px"/>
+              </div>
+            </ng-container>
+
+            <ng-container *ngIf="selectedCategory.name === 'DataMonitor'">
+              <div class="content-secondary" style="text-align: center; padding-top: 25px;">
+                <img src="assets/img/Under-Construction-page.svg" style="height: 300px; padding-bottom: 50px"/>
+              </div>
+            </ng-container>
+          </div>
+
+        </div>
+      </div>
+    </ng-container>
+
+    <div *ngIf="selectedTabIndex === 1" class="container-secondary">
+      <div class="content-secondary" style="text-align: center; padding-top: 25px;">
+        <img src="assets/img/Under-Construction-page.svg" style="height: 300px;"/>
+      </div>
+    </div>
+
+    <div *ngIf="selectedTabIndex >= 2" class="container-secondary">
+      <div class="content-secondary" style="text-align: center; padding-top: 25px;">
+        <img src="assets/img/Under-Construction-page.svg" style="height: 300px;"/>
+      </div>
+    </div>
+
+  </ng-container>
+
+</div>
