@@ -7,9 +7,9 @@ use crate::parsing_utils::{self, LineLoc, ParsingError};
 
 #[derive(PartialEq, Debug)]
 pub struct Constant {
-    name: String,
-    api_url: String,
-    line_loc: LineLoc,
+    pub name: String,
+    pub api_url: String,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]

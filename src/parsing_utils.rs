@@ -17,7 +17,7 @@ pub fn default_parser(source_file: &SourceFile) -> Parser<Lexer> {
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
-#[error("{msg} at {line_loc}")]
+#[error("{msg}, at {line_loc}")]
 pub struct ParsingError {
     msg: String,
     line_loc: LineLoc,
@@ -124,7 +124,7 @@ function() {}
 
         let err = get_module(&mut parser, &source_map).unwrap_err();
 
-        assert_eq!(err.to_string(), "Expected ident at line 2, col 8");
+        assert_eq!(err.to_string(), "Expected ident, at line 2, col 8");
     }
 
     #[test]

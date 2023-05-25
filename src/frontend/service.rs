@@ -6,15 +6,15 @@ use crate::parsing_utils::{self, LineLoc, ParsingError};
 
 #[derive(PartialEq, Debug)]
 pub struct Service {
-    class_name: String,
-    methods: Vec<ServiceMethod>,
+    pub class_name: String,
+    pub methods: Vec<ServiceMethod>,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct ServiceMethod {
-    signature: String,
-    used_api_url_name: String,
-    line_loc: LineLoc,
+    pub signature: String,
+    pub used_api_url_name: String,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]

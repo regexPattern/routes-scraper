@@ -1,4 +1,4 @@
 #![allow(unused)]
 
-mod frontend;
+pub mod frontend;
 mod parsing_utils;

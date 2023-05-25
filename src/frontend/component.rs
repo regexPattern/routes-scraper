@@ -9,9 +9,9 @@ use crate::parsing_utils::{self, LineLoc, ParsingError};
 
 #[derive(PartialEq, Debug)]
 pub struct ComponentServiceUsage {
-    component_method_signature: String,
-    used_service: String,
-    line_loc: LineLoc,
+    pub component_method_signature: String,
+    pub used_service: String,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
@@ -25,8 +25,10 @@ pub enum FileError {
     #[error("Missing service import from same directory as the component")]
     MissingServiceImport,
 
-    #[error("A component class must declare a service attribute in it's constructor parameters")]
-    ServiceNotStoredAsAttribute,
+    #[error(
+        "Component class must declare a service attribute in it's constructor parameters, at {0}"
+    )]
+    ServiceNotStoredAsAttribute(LineLoc),
 }
 
 pub fn parse(filename: FileName, source: String) -> anyhow::Result<Vec<ComponentServiceUsage>> {
@@ -65,7 +67,9 @@ pub fn parse(filename: FileName, source: String) -> anyhow::Result<Vec<Component
         .find_map(|param| {
             get_service_attribute_name(param.as_ts_param_prop()?, &source_map, &service_class_re)
         })
-        .ok_or(FileError::ServiceNotStoredAsAttribute)?;
+        .ok_or(FileError::ServiceNotStoredAsAttribute(
+            parsing_utils::line_loc_from_span(constructor.span, &source_map),
+        ))?;
 
     #[allow(clippy::expect_used)]
     let service_usage_re =
@@ -281,7 +285,7 @@ export class Component {
 
     #[test]
     #[should_panic(
-        expected = "A component class must declare a service attribute in it's constructor parameters"
+        expected = "Component class must declare a service attribute in it's constructor parameters, at line 5, col 4"
     )]
     fn component_class_must_store_the_service() {
         let source = r#"
