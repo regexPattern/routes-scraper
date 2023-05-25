@@ -1,6 +1,7 @@
 use regex::Regex;
 use swc_common::{FileName, SourceMap, SourceMapper};
-use swc_ecma_ast::{ClassMethod, ImportDecl, TsParamProp};
+use swc_ecma_ast::{ClassMethod, ImportDecl, TsParamProp, Stmt, ExprStmt};
+use swc_ecma_visit::{All, VisitAll};
 
 use crate::parsing_utils::{self, LineLoc, ParsingError};
 
@@ -113,6 +114,15 @@ fn get_service_attribute_name(
         .map(|capture| capture.as_str().to_owned())
 }
 
+struct StmtVisitor<'s> {
+    source_map: &'s SourceMap,
+}
+
+impl VisitAll for StmtVisitor<'_> {
+    fn visit_expr_stmt(&mut self, expr_stmt: &ExprStmt) {
+    }
+}
+
 fn get_method_service_usages(
     method: &ClassMethod,
     source_map: &SourceMap,
@@ -120,7 +130,11 @@ fn get_method_service_usages(
 ) -> impl Iterator<Item = ServiceMethodUsage> {
     // TODO: Remove this unwrap.
     let body = method.function.body.as_ref().unwrap();
+
+    let visitor = All { visitor: todo!() };
     let expr_stmts = body.stmts.iter().filter_map(|stmt| stmt.as_expr());
+
+    dbg!(&body);
 
     let usages: Vec<_> = expr_stmts
         .filter_map(|stmt| {
@@ -130,8 +144,6 @@ fn get_method_service_usages(
                 .captures(&stmt_str)?
                 .get(1)
                 .map(|capture| capture.as_str().to_owned())?;
-
-            println!("{stmt_str}");
 
             Some(ServiceMethodUsage {
                 used_service_method_name,
@@ -235,7 +247,14 @@ export class Component {
 export class Component {
   method1() {
     this.causalService.serviceMethod1().subscribe();
-    this.causalService.serviceMethod2().subscribe();
+
+    if (condition) {
+      for (const value in condition) {
+        callback(() => {
+          this.causalService.serviceMethod2().subscribe()
+        });
+      }
+    }
   }
 
   method2() {}
@@ -314,6 +333,6 @@ export class Component {
 
         let usages = parse(FileName::Anon, source).unwrap();
 
-        assert_eq!(usages.len(), 20);
+        assert_eq!(usages.len(), 23);
     }
 }
