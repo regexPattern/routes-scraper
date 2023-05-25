@@ -1,11 +1,12 @@
 use regex::Regex;
 use swc_common::{FileName, SourceMap, SourceMapper};
-use swc_ecma_ast::{ImportDecl, Param, TsParamProp};
+use swc_ecma_ast::{ClassMethod, ImportDecl, TsParamProp};
 
 use crate::parsing_utils::{self, LineLoc, ParsingError};
 
 #[derive(PartialEq, Debug)]
-pub struct ComponentMethod {
+pub struct ServiceMethodUsage {
+    used_service_method_name: String,
     signature: String,
     line_loc: LineLoc,
 }
@@ -20,27 +21,37 @@ pub enum FileError {
 
     #[error("Component class must have a constructor")]
     MissingClassConstructor,
+
+    #[error("Missing service import from component directory")]
+    MissingServiceImport,
+
+    #[error("A component class must declare a service attribute in it's constructor")]
+    ServiceNotStoredAsAttribute,
 }
 
-pub fn scrape(filename: FileName, source: String) -> Result<Vec<ComponentMethod>, FileError> {
+pub fn scrape(filename: FileName, source: String) -> Result<Vec<ServiceMethodUsage>, FileError> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::module(&mut parser, &source_map).unwrap();
+    let module =
+        parsing_utils::module(&mut parser, &source_map).map_err(FileError::ParsingError)?;
+
+    let mut exports = module
+        .body
+        .iter()
+        .filter_map(|mod_item| mod_item.as_module_decl()?.as_export_decl());
 
     let service_name = module
         .body
         .iter()
         .filter_map(|mod_item| mod_item.as_module_decl()?.as_import())
         .find_map(|import| component_service_class_name(import, &source_map))
-        .unwrap();
+        .ok_or(FileError::MissingServiceImport)?;
 
-    let class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
-        .map_err(FileError::ParsingError)?
-        .ok_or(FileError::MissingClassConstructor)?;
-
-    let service_type_re = Regex::new(&format!(r#"(\w+): {service_name}"#)).unwrap();
+    let class_decl = exports
+        .find_map(|export_decl| export_decl.decl.as_class())
+        .ok_or(FileError::MissingClassExport)?;
 
     let constructor = class_decl
         .class
@@ -49,18 +60,30 @@ pub fn scrape(filename: FileName, source: String) -> Result<Vec<ComponentMethod>
         .find_map(|class_member| class_member.as_constructor())
         .ok_or(FileError::MissingClassConstructor)?;
 
+    #[allow(clippy::expect_used)]
+    let service_class_name_re =
+        Regex::new(&format!(r#"(\w+): {service_name}"#)).expect("Error compiling regex");
+
     let attribute_name = constructor
         .params
         .iter()
         .find_map(|param| {
-            service_attribute_name(param.as_ts_param_prop()?, &source_map, &service_type_re)
+            service_attribute_name(
+                param.as_ts_param_prop()?,
+                &source_map,
+                &service_class_name_re,
+            )
         })
-        .unwrap();
+        .ok_or(FileError::ServiceNotStoredAsAttribute)?;
 
-    // let methods = parsing_utils::class_methods(class_decl).filter_map(|method| {
-    // })
+    #[allow(clippy::expect_used)]
+    let service_attribute_name_re =
+        Regex::new(&format!(r#"this.{attribute_name}.(\w+)"#)).expect("Error compiling regex");
 
-    Ok(vec![])
+    let usages = parsing_utils::class_methods(class_decl)
+        .flat_map(|method| method_service_usages(method, &source_map, &service_attribute_name_re));
+
+    Ok(usages.collect())
 }
 
 fn component_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> Option<String> {
@@ -78,14 +101,42 @@ fn component_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> 
 fn service_attribute_name(
     param: &TsParamProp,
     source_map: &SourceMap,
-    service_type_re: &Regex,
+    service_class_name_re: &Regex,
 ) -> Option<String> {
     let param_str = source_map.span_to_snippet(param.span).ok()?;
 
-    service_type_re
+    service_class_name_re
         .captures(&param_str)?
         .get(1)
         .map(|capture| capture.as_str().to_owned())
+}
+
+fn method_service_usages(
+    method: &ClassMethod,
+    source_map: &SourceMap,
+    service_attribute_name_re: &Regex,
+) -> impl Iterator<Item = ServiceMethodUsage> {
+    let body = method.function.body.as_ref().unwrap();
+    let expr_stmts = body.stmts.iter().filter_map(|stmt| stmt.as_expr());
+
+    let usages: Vec<_> = expr_stmts
+        .filter_map(|stmt| {
+            let stmt_str = source_map.span_to_snippet(stmt.span).ok()?;
+
+            let used_service_method_name = service_attribute_name_re
+                .captures(&stmt_str)?
+                .get(1)
+                .map(|capture| capture.as_str().to_owned())?;
+
+            Some(ServiceMethodUsage {
+                used_service_method_name,
+                signature: parsing_utils::method_signature(method, source_map)?,
+                line_loc: parsing_utils::span_line_loc(stmt.span, source_map),
+            })
+        })
+        .collect();
+
+    usages.into_iter()
 }
 
 #[cfg(test)]
@@ -129,7 +180,7 @@ import { Service } from '../parent_dir';
     }
 
     #[test]
-    fn getting_attribute_that_stores_the_service() {
+    fn getting_the_attribute_that_stores_the_service() {
         let source = r#"
 export class Component {
   constructor(
@@ -169,5 +220,83 @@ export class Component {
             .unwrap();
 
         assert_eq!(attribute_name, "causalService");
+    }
+
+    #[test]
+    fn finding_usages_of_service_method_in_component_class_methods() {
+        let source = r#"
+export class Component {
+  method1() {
+    this.causalService.serviceMethod1().subscribe();
+    this.causalService.serviceMethod2().subscribe();
+  }
+
+  method2() {}
+}
+"#;
+
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
+        let mut parser = parsing_utils::default_parser(&source_file);
+
+        let class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
+            .unwrap()
+            .unwrap();
+
+        let usages: Vec<_> = parsing_utils::class_methods(&class_decl)
+            .flat_map(|method| {
+                method_service_usages(
+                    &method,
+                    &source_map,
+                    &Regex::new(r#"this.causalService.(\w+)"#).unwrap(),
+                )
+            })
+            .collect();
+
+        assert_eq!(usages.len(), 2);
+
+        assert_eq!(
+            &usages[0],
+            &ServiceMethodUsage {
+                used_service_method_name: "serviceMethod1".to_string(),
+                signature: "method1(): any".to_string(),
+                line_loc: LineLoc { line: 4, col: 4 },
+            }
+        );
+
+        assert_eq!(
+            &usages[1],
+            &ServiceMethodUsage {
+                used_service_method_name: "serviceMethod2".to_string(),
+                signature: "method1(): any".to_string(),
+                line_loc: LineLoc { line: 5, col: 4 },
+            }
+        );
+    }
+
+    #[test]
+    fn parsing_a_component() {
+        let source = r#"
+import { Service } from './service';
+
+export class Component {
+    constructor(private service: Service) {}
+
+    method1() {
+        this.service.serviceMethod1();
+        this.service.serviceMethod2();
+    }
+
+    method2() {}
+
+    method3() {
+        this.service.serviceMethod3();
+    }
+}
+"#;
+
+        let usages = scrape(FileName::Anon, source.to_string()).unwrap();
+
+        assert_eq!(usages.len(), 3);
     }
 }

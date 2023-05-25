@@ -1,8 +1,7 @@
 use std::collections::VecDeque;
 
-use swc_common::{FileName, SourceMap, Spanned};
-use swc_ecma_ast::{EsVersion, Lit};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_common::{FileName, SourceMap};
+use swc_ecma_ast::Lit;
 
 use crate::parsing_utils::{self, LineLoc, ParsingError};
 
@@ -71,6 +70,8 @@ pub fn scrape(filename: FileName, source: String) -> Result<Vec<Constant>, FileE
 
 #[cfg(test)]
 mod tests {
+    use include_bytes_plus::include_bytes;
+
     use super::*;
 
     #[test]
@@ -103,6 +104,8 @@ export const apiUrls = {
 
         let filename = FileName::Anon;
         let constants = scrape(filename, source.to_string()).unwrap();
+
+        assert_eq!(constants.len(), 3);
 
         assert_eq!(
             &constants[0],
@@ -148,5 +151,15 @@ export const apiUrls = {
         let constants = scrape(filename, source.to_string()).unwrap();
 
         assert_eq!(constants.len(), 3);
+    }
+
+    #[test]
+    fn getting_causal_impact_constants() {
+        let bytes = include_bytes!("./test_data/frontend/causal-impact/constants.ts");
+        let source = String::from_utf8(bytes.into()).unwrap();
+
+        let constants = scrape(FileName::Anon, source).unwrap();
+
+        assert_eq!(constants.len(), 24);
     }
 }

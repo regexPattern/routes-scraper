@@ -1,7 +1,6 @@
 use regex::Regex;
 use swc_common::{FileName, SourceMap, SourceMapper};
-use swc_ecma_ast::{ClassDecl, ClassMethod, ExportDecl};
-use swc_ecma_parser::{lexer::Lexer, Parser};
+use swc_ecma_ast::ClassMethod;
 
 use crate::parsing_utils::{self, LineLoc, ParsingError};
 
@@ -32,18 +31,18 @@ pub fn scrape(filename: FileName, source: String) -> Result<Service, FileError> 
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
-    let mut class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
+    let class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
         .map_err(FileError::ParsingError)?
         .ok_or(FileError::MissingClassExport)?;
 
     let class_name = class_decl.ident.sym.to_string();
 
-    let methods = parsing_utils::class_methods(class_decl).filter_map(|method| {
-        let used_api_url_name = consumed_api_url_in_method(&method, &source_map)?;
+    let methods = parsing_utils::class_methods(&class_decl).filter_map(|method| {
+        let used_api_url_name = consumed_api_url_in_method(method, &source_map)?;
         let line_loc = parsing_utils::span_line_loc(method.span, &source_map);
 
         Some(ServiceMethod {
-            signature: parsing_utils::method_signature(&method, &source_map)?,
+            signature: parsing_utils::method_signature(method, &source_map)?,
             used_api_url_name,
             line_loc,
         })
@@ -69,17 +68,19 @@ fn consumed_api_url_in_method(method: &ClassMethod, source_map: &SourceMap) -> O
 
 #[cfg(test)]
 mod tests {
-    use swc_common::SourceFile;
+    use include_bytes_plus::include_bytes;
 
     use super::*;
 
     #[test]
     fn service_file_must_have_a_class_export() {
         let exported_class = r#"
+@Injectable()
 export class Service {}
 "#;
 
         let not_exported_class = r#"
+@Injectable()
 class Service {}
 "#;
 
@@ -116,7 +117,7 @@ export class Service {
                 .unwrap()
                 .unwrap();
 
-            let method = parsing_utils::class_methods(class_decl).next().unwrap();
+            let method = parsing_utils::class_methods(&class_decl).next().unwrap();
 
             consumed_api_url_in_method(&method, &source_map)
         }
@@ -147,11 +148,14 @@ export class Service {
     const url = this.nodeServerUrl + api;
     return this.http.get<any>(url);
   }
+}
 "#;
 
         let service = scrape(FileName::Anon, source.to_string()).unwrap();
 
         assert_eq!(service.class_name, "Service");
+
+        assert_eq!(service.methods.len(), 2);
 
         assert_eq!(
             &service.methods[0],
@@ -170,5 +174,15 @@ export class Service {
                 line_loc: LineLoc { line: 9, col: 2 }
             }
         );
+    }
+
+    #[test]
+    fn getting_causal_impact_service_methods() {
+        let bytes = include_bytes!("./test_data/frontend/causal-impact/causal.service.ts");
+        let source = String::from_utf8(bytes.into()).unwrap();
+
+        let service = scrape(FileName::Anon, source).unwrap();
+
+        assert_eq!(service.methods.len(), 23);
     }
 }

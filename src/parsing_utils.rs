@@ -6,9 +6,12 @@ use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
 pub fn default_parser(source_file: &SourceFile) -> Parser<Lexer> {
     Parser::new_from(Lexer::new(
-        Syntax::Typescript(TsConfig::default()),
+        Syntax::Typescript(TsConfig {
+            decorators: true,
+            ..Default::default()
+        }),
         EsVersion::EsNext,
-        StringInput::from(&*source_file),
+        StringInput::from(source_file),
         None,
     ))
 }
@@ -44,7 +47,7 @@ impl From<Loc> for LineLoc {
 pub fn module(parser: &mut Parser<Lexer>, source_map: &SourceMap) -> Result<Module, ParsingError> {
     parser.parse_module().map_err(|err| ParsingError {
         msg: err.kind().msg().to_string(),
-        line_loc: span_line_loc(err.span(), &source_map),
+        line_loc: span_line_loc(err.span(), source_map),
     })
 }
 
@@ -72,17 +75,19 @@ pub fn first_exported_class(
 ) -> Result<Option<ClassDecl>, ParsingError> {
     let exports = module_exports(parser, source_map)?;
 
+    dbg!(&exports);
+
     Ok(exports
         .into_iter()
         .find_map(|export_decl| export_decl.decl.class()))
 }
 
-pub fn class_methods(class: ClassDecl) -> impl Iterator<Item = ClassMethod> {
+pub fn class_methods(class: &ClassDecl) -> impl Iterator<Item = &ClassMethod> {
     class
         .class
         .body
-        .into_iter()
-        .filter_map(|class_member| class_member.method())
+        .iter()
+        .filter_map(|class_member| class_member.as_method())
 }
 
 pub fn method_signature(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
@@ -103,8 +108,11 @@ pub fn method_signature(method: &ClassMethod, source_map: &SourceMap) -> Option<
         })
         .collect();
 
-    let return_type = function.return_type.as_ref()?;
-    let return_type = source_map.span_to_snippet(return_type.span).ok()?;
+    let return_type = if let Some(return_type) = function.return_type.as_ref() {
+        source_map.span_to_snippet(return_type.span).ok()?
+    } else {
+        ": any".to_string()
+    };
 
     Some(format!("{name}({}){return_type}", params.join(", ")))
 }
@@ -142,9 +150,11 @@ export class Service {
         let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
         let mut parser = default_parser(&source_file);
 
-        let class_decl = first_exported_class(&mut parser, &source_map).unwrap().unwrap();
+        let class_decl = first_exported_class(&mut parser, &source_map)
+            .unwrap()
+            .unwrap();
 
-        let method = class_methods(class_decl).next().unwrap();
+        let method = class_methods(&class_decl).next().unwrap();
 
         assert_eq!(
             method_signature(&method, &source_map),
