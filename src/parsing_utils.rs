@@ -50,7 +50,7 @@ pub fn get_module(
 ) -> Result<Module, ParsingError> {
     parser.parse_module().map_err(|err| ParsingError {
         msg: err.kind().msg().to_string(),
-        line_loc: get_span_line_loc(err.span(), source_map),
+        line_loc: line_loc_from_span(err.span(), source_map),
     })
 }
 
@@ -61,7 +61,7 @@ pub fn get_module_exports(module: &Module) -> impl Iterator<Item = &ExportDecl> 
         .filter_map(|mod_item| mod_item.as_module_decl()?.as_export_decl())
 }
 
-pub fn get_span_line_loc(span: Span, source_map: &SourceMap) -> LineLoc {
+pub fn line_loc_from_span(span: Span, source_map: &SourceMap) -> LineLoc {
     LineLoc::from(source_map.lookup_char_pos(span.lo))
 }
 

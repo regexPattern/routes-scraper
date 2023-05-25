@@ -1,42 +1,35 @@
+use std::collections::HashMap;
+
 use regex::Regex;
-use swc_common::{FileName, SourceMap, SourceMapper};
-use swc_ecma_ast::{ClassMethod, ImportDecl, TsParamProp, Stmt, ExprStmt};
-use swc_ecma_visit::{All, VisitAll};
+use swc_common::{BytePos, FileName, SourceMap, SourceMapper, Span, Spanned};
+use swc_ecma_ast::{CallExpr, ClassMethod, ExprStmt, ImportDecl, MemberExpr, Stmt, TsParamProp};
+use swc_ecma_visit::{All, Visit, VisitAll};
 
 use crate::parsing_utils::{self, LineLoc, ParsingError};
 
 #[derive(PartialEq, Debug)]
-pub struct ServiceMethodUsage {
-    used_service_method_name: String,
-    signature: String,
+pub struct ComponentServiceUsage {
+    component_method_signature: String,
+    used_service: String,
     line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
 pub enum FileError {
-    #[error(transparent)]
-    ParsingError(ParsingError),
-
     #[error("Missing named export of a component class")]
     MissingClassExport,
 
     #[error("Component class must have a constructor")]
     MissingClassConstructor,
 
-    #[error("Missing service import from component directory")]
+    #[error("Missing service import from same directory as the component")]
     MissingServiceImport,
 
-    #[error("A component class must declare a service attribute in it's constructor")]
+    #[error("A component class must declare a service attribute in it's constructor parameters")]
     ServiceNotStoredAsAttribute,
 }
 
-impl From<ParsingError> for FileError {
-    fn from(err: ParsingError) -> Self {
-        Self::ParsingError(err)
-    }
-}
-
-pub fn parse(filename: FileName, source: String) -> Result<Vec<ServiceMethodUsage>, FileError> {
+pub fn parse(filename: FileName, source: String) -> anyhow::Result<Vec<ComponentServiceUsage>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
@@ -44,18 +37,18 @@ pub fn parse(filename: FileName, source: String) -> Result<Vec<ServiceMethodUsag
     let module = parsing_utils::get_module(&mut parser, &source_map)?;
     let mut exports = parsing_utils::get_module_exports(&module);
 
-    let service_name = module
+    let service_class = module
         .body
         .iter()
         .filter_map(|mod_item| mod_item.as_module_decl()?.as_import())
         .find_map(|import| get_component_service_class_name(import, &source_map))
         .ok_or(FileError::MissingServiceImport)?;
 
-    let class_decl = exports
+    let class = exports
         .find_map(|export_decl| export_decl.decl.as_class())
         .ok_or(FileError::MissingClassExport)?;
 
-    let constructor = class_decl
+    let constructor = class
         .class
         .body
         .iter()
@@ -63,28 +56,23 @@ pub fn parse(filename: FileName, source: String) -> Result<Vec<ServiceMethodUsag
         .ok_or(FileError::MissingClassConstructor)?;
 
     #[allow(clippy::expect_used)]
-    let service_class_name_re =
-        Regex::new(&format!(r#"(\w+): {service_name}"#)).expect("Error compiling regex");
+    let service_class_re =
+        Regex::new(&format!(r#"(\w+): {service_class}"#)).expect("Error compiling regex");
 
-    let attribute_name = constructor
+    let service_attribute = constructor
         .params
         .iter()
         .find_map(|param| {
-            get_service_attribute_name(
-                param.as_ts_param_prop()?,
-                &source_map,
-                &service_class_name_re,
-            )
+            get_service_attribute_name(param.as_ts_param_prop()?, &source_map, &service_class_re)
         })
         .ok_or(FileError::ServiceNotStoredAsAttribute)?;
 
     #[allow(clippy::expect_used)]
-    let service_attribute_name_re =
-        Regex::new(&format!(r#"this.{attribute_name}.(\w+)"#)).expect("Error compiling regex");
+    let service_usage_re =
+        Regex::new(&format!(r#"this.{service_attribute}.(\w+)"#)).expect("Error compiling regex");
 
-    let usages = parsing_utils::get_class_methods(class_decl).flat_map(|method| {
-        get_method_service_usages(method, &source_map, &service_attribute_name_re)
-    });
+    let usages = parsing_utils::get_class_methods(class)
+        .flat_map(|method| get_service_usages_in_method(method, &source_map, &service_usage_re));
 
     Ok(usages.collect())
 }
@@ -114,46 +102,62 @@ fn get_service_attribute_name(
         .map(|capture| capture.as_str().to_owned())
 }
 
-struct StmtVisitor<'s> {
+struct ServiceUsagesCollector<'r, 's> {
     source_map: &'s SourceMap,
+    method_signature: String,
+    service_usage_re: &'r Regex,
+    usages: HashMap<String, ComponentServiceUsage>,
 }
 
-impl VisitAll for StmtVisitor<'_> {
-    fn visit_expr_stmt(&mut self, expr_stmt: &ExprStmt) {
+impl VisitAll for ServiceUsagesCollector<'_, '_> {
+    fn visit_member_expr(&mut self, member_expr: &MemberExpr) {
+        if let Ok(snippet) = self.source_map.span_to_snippet(member_expr.span) {
+            if let Some(used_service) = self.used_service_name(&snippet) {
+                let span = parsing_utils::line_loc_from_span(member_expr.span, self.source_map);
+
+                self.usages
+                    .entry(format!("{used_service}:{}", span.line))
+                    .or_insert(ComponentServiceUsage {
+                        component_method_signature: self.method_signature.clone(),
+                        used_service,
+                        line_loc: span,
+                    });
+            }
+        }
     }
 }
 
-fn get_method_service_usages(
+impl ServiceUsagesCollector<'_, '_> {
+    fn used_service_name(&self, snippet: &str) -> Option<String> {
+        self.service_usage_re
+            .captures(snippet)?
+            .get(1)
+            .map(|capture| capture.as_str().to_owned())
+    }
+}
+
+fn get_service_usages_in_method(
     method: &ClassMethod,
     source_map: &SourceMap,
-    service_attribute_name_re: &Regex,
-) -> impl Iterator<Item = ServiceMethodUsage> {
+    service_usage_re: &Regex,
+) -> impl Iterator<Item = ComponentServiceUsage> {
     // TODO: Remove this unwrap.
     let body = method.function.body.as_ref().unwrap();
 
-    let visitor = All { visitor: todo!() };
-    let expr_stmts = body.stmts.iter().filter_map(|stmt| stmt.as_expr());
+    let method_signature = parsing_utils::gen_method_signature(method, source_map).unwrap();
 
-    dbg!(&body);
+    let mut tree_walker = All {
+        visitor: ServiceUsagesCollector {
+            source_map,
+            method_signature,
+            service_usage_re,
+            usages: HashMap::new(),
+        },
+    };
 
-    let usages: Vec<_> = expr_stmts
-        .filter_map(|stmt| {
-            let stmt_str = source_map.span_to_snippet(stmt.span).ok()?;
+    tree_walker.visit_block_stmt(&body);
 
-            let used_service_method_name = service_attribute_name_re
-                .captures(&stmt_str)?
-                .get(1)
-                .map(|capture| capture.as_str().to_owned())?;
-
-            Some(ServiceMethodUsage {
-                used_service_method_name,
-                signature: parsing_utils::gen_method_signature(method, source_map)?,
-                line_loc: parsing_utils::get_span_line_loc(stmt.span, source_map),
-            })
-        })
-        .collect();
-
-    usages.into_iter()
+    tree_walker.visitor.usages.into_iter().map(|usage| usage.1)
 }
 
 #[cfg(test)]
@@ -161,6 +165,18 @@ mod tests {
     use include_bytes_plus::include_bytes;
 
     use super::*;
+
+    #[test]
+    #[should_panic(expected = "Missing named export of a component class")]
+    fn component_file_must_have_a_class_export() {
+        let source = r#"
+import { Service } from './service';
+
+class Service {}
+"#;
+
+        parse(FileName::Anon, source.to_string()).unwrap();
+    }
 
     #[test]
     fn getting_the_service_at_the_current_dir() {
@@ -196,6 +212,28 @@ import { Service } from '../parent_dir';
             component_service_class_name_from_str(imports_service_from_another_path),
             None
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Missing service import from same directory as the component")]
+    fn component_file_must_import_the_service_in_the_same_directory() {
+        let source = r#"
+export class Service {}
+"#;
+
+        parse(FileName::Anon, source.to_string()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Component class must have a constructor")]
+    fn component_class_must_have_a_constructor() {
+        let source = r#"
+import { Service } from './service';
+
+export class Service {}
+"#;
+
+        parse(FileName::Anon, source.to_string()).unwrap();
     }
 
     #[test]
@@ -242,6 +280,22 @@ export class Component {
     }
 
     #[test]
+    #[should_panic(
+        expected = "A component class must declare a service attribute in it's constructor parameters"
+    )]
+    fn component_class_must_store_the_service() {
+        let source = r#"
+import { Service } from './service';
+
+export class Service {
+    constructor() {}
+}
+"#;
+
+        parse(FileName::Anon, source.to_string()).unwrap();
+    }
+
+    #[test]
     fn finding_usages_of_service_method_in_component_class_methods() {
         let source = r#"
 export class Component {
@@ -271,7 +325,7 @@ export class Component {
 
         let usages: Vec<_> = parsing_utils::get_class_methods(&class_decl)
             .flat_map(|method| {
-                get_method_service_usages(
+                get_service_usages_in_method(
                     &method,
                     &source_map,
                     &Regex::new(r#"this.causalService.(\w+)"#).unwrap(),
@@ -281,23 +335,17 @@ export class Component {
 
         assert_eq!(usages.len(), 2);
 
-        assert_eq!(
-            &usages[0],
-            &ServiceMethodUsage {
-                used_service_method_name: "serviceMethod1".to_string(),
-                signature: "method1(): any".to_string(),
-                line_loc: LineLoc { line: 4, col: 4 },
-            }
-        );
+        assert!(usages.contains(&ComponentServiceUsage {
+            used_service: "serviceMethod1".to_string(),
+            component_method_signature: "method1(): any".to_string(),
+            line_loc: LineLoc { line: 4, col: 4 },
+        }));
 
-        assert_eq!(
-            &usages[1],
-            &ServiceMethodUsage {
-                used_service_method_name: "serviceMethod2".to_string(),
-                signature: "method1(): any".to_string(),
-                line_loc: LineLoc { line: 5, col: 4 },
-            }
-        );
+        assert!(usages.contains(&ComponentServiceUsage {
+            used_service: "serviceMethod2".to_string(),
+            component_method_signature: "method1(): any".to_string(),
+            line_loc: LineLoc { line: 9, col: 10 },
+        }));
     }
 
     #[test]
@@ -327,11 +375,14 @@ export class Component {
     }
 
     #[test]
-    fn getting_causal_impact_component_methods() {
+    fn getting_causal_impact_service_usages() {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal-impact.component.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let usages = parse(FileName::Anon, source).unwrap();
+        let mut usages = parse(FileName::Anon, source).unwrap();
+        usages.sort_by_key(|usage| usage.line_loc.line);
+
+        dbg!(&usages);
 
         assert_eq!(usages.len(), 23);
     }

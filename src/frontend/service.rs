@@ -19,34 +19,26 @@ pub struct ServiceMethod {
 
 #[derive(thiserror::Error, PartialEq, Debug)]
 pub enum FileError {
-    #[error(transparent)]
-    ParsingError(ParsingError),
-
     #[error("Missing named export of a service class")]
     MissingClassExport,
 }
 
-impl From<ParsingError> for FileError {
-    fn from(err: ParsingError) -> Self {
-        Self::ParsingError(err)
-    }
-}
-
-pub fn parse(filename: FileName, source: String) -> Result<Service, FileError> {
+pub fn parse(filename: FileName, source: String) -> anyhow::Result<Service> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
     let module = parsing_utils::get_module(&mut parser, &source_map)?;
     let exports = parsing_utils::get_module_exports(&module);
-    let class_decl =
+
+    let class =
         parsing_utils::get_first_exported_class(exports).ok_or(FileError::MissingClassExport)?;
 
-    let class_name = class_decl.ident.sym.to_string();
+    let class_name = class.ident.sym.to_string();
 
-    let methods = parsing_utils::get_class_methods(&class_decl).filter_map(|method| {
+    let methods = parsing_utils::get_class_methods(&class).filter_map(|method| {
         let used_api_url_name = get_consumed_api_url_in_method(method, &source_map)?;
-        let line_loc = parsing_utils::get_span_line_loc(method.span, &source_map);
+        let line_loc = parsing_utils::line_loc_from_span(method.span, &source_map);
 
         Some(ServiceMethod {
             signature: parsing_utils::gen_method_signature(method, &source_map)?,
@@ -66,9 +58,9 @@ fn get_consumed_api_url_in_method(method: &ClassMethod, source_map: &SourceMap) 
         static ref RE: Regex = Regex::new("apiUrls.([A-Z_]+)").unwrap();
     }
 
-    let method_str = source_map.span_to_snippet(method.span).ok()?;
+    let method_snippet = source_map.span_to_snippet(method.span).ok()?;
 
-    RE.captures(&method_str)?
+    RE.captures(&method_snippet)?
         .get(1)
         .map(|capture| capture.as_str().to_owned())
 }
@@ -80,21 +72,14 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic(expected = "Missing named export of a service class")]
     fn service_file_must_have_a_class_export() {
-        let exported_class = r#"
-@Injectable()
-export class Service {}
-"#;
-
-        let not_exported_class = r#"
+        let source = r#"
 @Injectable()
 class Service {}
 "#;
 
-        parse(FileName::Anon, exported_class.to_string()).unwrap();
-        let err = parse(FileName::Anon, not_exported_class.to_string()).unwrap_err();
-
-        assert_eq!(err, FileError::MissingClassExport);
+        parse(FileName::Anon, source.to_string()).unwrap();
     }
 
     #[test]

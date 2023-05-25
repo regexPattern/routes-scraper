@@ -14,20 +14,11 @@ pub struct Constant {
 
 #[derive(thiserror::Error, PartialEq, Debug)]
 pub enum FileError {
-    #[error(transparent)]
-    ParsingError(ParsingError),
-
     #[error("Missing named export of `apiUrls` object literal")]
     MissingApiUrlsExport,
 }
 
-impl From<ParsingError> for FileError {
-    fn from(err: ParsingError) -> Self {
-        Self::ParsingError(err)
-    }
-}
-
-pub fn parse(filename: FileName, source: String) -> Result<Vec<Constant>, FileError> {
+pub fn parse(filename: FileName, source: String) -> anyhow::Result<Vec<Constant>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
@@ -39,7 +30,7 @@ pub fn parse(filename: FileName, source: String) -> Result<Vec<Constant>, FileEr
         .cloned()
         .filter_map(|export_decl| export_decl.decl.var());
 
-    let api_urls_object_lit = var_decls
+    let api_urls = var_decls
         .find_map(|var_decl| {
             let mut decls = VecDeque::from(var_decl.decls);
             let var_declarator = decls.pop_front()?;
@@ -52,11 +43,11 @@ pub fn parse(filename: FileName, source: String) -> Result<Vec<Constant>, FileEr
         })
         .ok_or(FileError::MissingApiUrlsExport)?;
 
-    let constants = api_urls_object_lit.props.into_iter().filter_map(|prop| {
+    let constants = api_urls.props.into_iter().filter_map(|prop| {
         let key_value_pair = prop.prop()?.key_value()?;
 
         let ident = key_value_pair.key.ident()?;
-        let line_loc = parsing_utils::get_span_line_loc(ident.span, &source_map);
+        let line_loc = parsing_utils::line_loc_from_span(ident.span, &source_map);
         let name = ident.sym.to_string();
 
         let api_url = match key_value_pair.value.lit()? {
@@ -81,21 +72,15 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic(expected = "Missing named export of `apiUrls` object literal")]
     fn api_urls_exported_variable_must_be_an_object_literal() {
-        let object_literal = r#"
-export const apiUrls = {};
-        "#;
-
-        let not_object_literal = r#"
+        let source = r#"
 export const apiUrls = 10;
 "#;
 
         let filename = FileName::Anon;
 
-        parse(filename.clone(), object_literal.to_string()).unwrap();
-        let err = parse(filename.clone(), not_object_literal.to_string()).unwrap_err();
-
-        assert_eq!(err, FileError::MissingApiUrlsExport);
+        parse(filename.clone(), source.to_string()).unwrap();
     }
 
     #[test]
