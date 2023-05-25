@@ -44,45 +44,34 @@ impl From<Loc> for LineLoc {
     }
 }
 
-pub fn module(parser: &mut Parser<Lexer>, source_map: &SourceMap) -> Result<Module, ParsingError> {
+pub fn get_module(
+    parser: &mut Parser<Lexer>,
+    source_map: &SourceMap,
+) -> Result<Module, ParsingError> {
     parser.parse_module().map_err(|err| ParsingError {
         msg: err.kind().msg().to_string(),
-        line_loc: span_line_loc(err.span(), source_map),
+        line_loc: get_span_line_loc(err.span(), source_map),
     })
 }
 
-pub fn module_exports(
-    parser: &mut Parser<Lexer>,
-    source_map: &SourceMap,
-) -> Result<Vec<ExportDecl>, ParsingError> {
-    let module = module(parser, source_map)?;
-
-    let exports = module
+pub fn get_module_exports(module: &Module) -> impl Iterator<Item = &ExportDecl> {
+    module
         .body
-        .into_iter()
-        .filter_map(|mod_item| mod_item.module_decl()?.export_decl());
-
-    Ok(exports.collect())
+        .iter()
+        .filter_map(|mod_item| mod_item.as_module_decl()?.as_export_decl())
 }
 
-pub fn span_line_loc(span: Span, source_map: &SourceMap) -> LineLoc {
+pub fn get_span_line_loc(span: Span, source_map: &SourceMap) -> LineLoc {
     LineLoc::from(source_map.lookup_char_pos(span.lo))
 }
 
-pub fn first_exported_class(
-    parser: &mut Parser<Lexer>,
-    source_map: &SourceMap,
-) -> Result<Option<ClassDecl>, ParsingError> {
-    let exports = module_exports(parser, source_map)?;
-
-    dbg!(&exports);
-
-    Ok(exports
-        .into_iter()
-        .find_map(|export_decl| export_decl.decl.class()))
+pub fn get_first_exported_class<'e>(
+    mut exports: impl Iterator<Item = &'e ExportDecl>,
+) -> Option<&'e ClassDecl> {
+    exports.find_map(|export_decl| export_decl.decl.as_class())
 }
 
-pub fn class_methods(class: &ClassDecl) -> impl Iterator<Item = &ClassMethod> {
+pub fn get_class_methods(class: &ClassDecl) -> impl Iterator<Item = &ClassMethod> {
     class
         .class
         .body
@@ -90,7 +79,7 @@ pub fn class_methods(class: &ClassDecl) -> impl Iterator<Item = &ClassMethod> {
         .filter_map(|class_member| class_member.as_method())
 }
 
-pub fn method_signature(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
+pub fn gen_method_signature(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
     let function = &method.function;
     let name = method.key.as_ident()?.sym.to_string();
 
@@ -133,7 +122,7 @@ function() {}
         let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
         let mut parser = default_parser(&source_file);
 
-        let err = module_exports(&mut parser, &source_map).unwrap_err();
+        let err = get_module(&mut parser, &source_map).unwrap_err();
 
         assert_eq!(err.to_string(), "Expected ident at line 2, col 8");
     }
@@ -150,14 +139,14 @@ export class Service {
         let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
         let mut parser = default_parser(&source_file);
 
-        let class_decl = first_exported_class(&mut parser, &source_map)
-            .unwrap()
-            .unwrap();
+        let module = get_module(&mut parser, &source_map).unwrap();
+        let exports = get_module_exports(&module);
+        let class_decl = get_first_exported_class(exports).unwrap();
 
-        let method = class_methods(&class_decl).next().unwrap();
+        let method = get_class_methods(&class_decl).next().unwrap();
 
         assert_eq!(
-            method_signature(&method, &source_map),
+            gen_method_signature(&method, &source_map),
             Some("methodName(param1: number, param2: CustomType, param3: any): number".into())
         );
     }

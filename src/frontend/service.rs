@@ -26,23 +26,30 @@ pub enum FileError {
     MissingClassExport,
 }
 
-pub fn scrape(filename: FileName, source: String) -> Result<Service, FileError> {
+impl From<ParsingError> for FileError {
+    fn from(err: ParsingError) -> Self {
+        Self::ParsingError(err)
+    }
+}
+
+pub fn parse(filename: FileName, source: String) -> Result<Service, FileError> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
-    let class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
-        .map_err(FileError::ParsingError)?
-        .ok_or(FileError::MissingClassExport)?;
+    let module = parsing_utils::get_module(&mut parser, &source_map)?;
+    let exports = parsing_utils::get_module_exports(&module);
+    let class_decl =
+        parsing_utils::get_first_exported_class(exports).ok_or(FileError::MissingClassExport)?;
 
     let class_name = class_decl.ident.sym.to_string();
 
-    let methods = parsing_utils::class_methods(&class_decl).filter_map(|method| {
-        let used_api_url_name = consumed_api_url_in_method(method, &source_map)?;
-        let line_loc = parsing_utils::span_line_loc(method.span, &source_map);
+    let methods = parsing_utils::get_class_methods(&class_decl).filter_map(|method| {
+        let used_api_url_name = get_consumed_api_url_in_method(method, &source_map)?;
+        let line_loc = parsing_utils::get_span_line_loc(method.span, &source_map);
 
         Some(ServiceMethod {
-            signature: parsing_utils::method_signature(method, &source_map)?,
+            signature: parsing_utils::gen_method_signature(method, &source_map)?,
             used_api_url_name,
             line_loc,
         })
@@ -54,7 +61,7 @@ pub fn scrape(filename: FileName, source: String) -> Result<Service, FileError> 
     })
 }
 
-fn consumed_api_url_in_method(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
+fn get_consumed_api_url_in_method(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
     lazy_static::lazy_static! {
         static ref RE: Regex = Regex::new("apiUrls.([A-Z_]+)").unwrap();
     }
@@ -84,8 +91,8 @@ export class Service {}
 class Service {}
 "#;
 
-        scrape(FileName::Anon, exported_class.to_string()).unwrap();
-        let err = scrape(FileName::Anon, not_exported_class.to_string()).unwrap_err();
+        parse(FileName::Anon, exported_class.to_string()).unwrap();
+        let err = parse(FileName::Anon, not_exported_class.to_string()).unwrap_err();
 
         assert_eq!(err, FileError::MissingClassExport);
     }
@@ -113,13 +120,15 @@ export class Service {
             let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
             let mut parser = parsing_utils::default_parser(&source_file);
 
-            let class_decl = parsing_utils::first_exported_class(&mut parser, &source_map)
-                .unwrap()
+            let module = parsing_utils::get_module(&mut parser, &source_map).unwrap();
+            let exports = parsing_utils::get_module_exports(&module);
+            let class_decl = parsing_utils::get_first_exported_class(exports).unwrap();
+
+            let method = parsing_utils::get_class_methods(&class_decl)
+                .next()
                 .unwrap();
 
-            let method = parsing_utils::class_methods(&class_decl).next().unwrap();
-
-            consumed_api_url_in_method(&method, &source_map)
+            get_consumed_api_url_in_method(&method, &source_map)
         }
 
         assert_eq!(
@@ -151,7 +160,7 @@ export class Service {
 }
 "#;
 
-        let service = scrape(FileName::Anon, source.to_string()).unwrap();
+        let service = parse(FileName::Anon, source.to_string()).unwrap();
 
         assert_eq!(service.class_name, "Service");
 
@@ -181,7 +190,7 @@ export class Service {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal.service.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let service = scrape(FileName::Anon, source).unwrap();
+        let service = parse(FileName::Anon, source).unwrap();
 
         assert_eq!(service.methods.len(), 23);
     }

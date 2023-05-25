@@ -21,16 +21,22 @@ pub enum FileError {
     MissingApiUrlsExport,
 }
 
-pub fn scrape(filename: FileName, source: String) -> Result<Vec<Constant>, FileError> {
+impl From<ParsingError> for FileError {
+    fn from(err: ParsingError) -> Self {
+        Self::ParsingError(err)
+    }
+}
+
+pub fn parse(filename: FileName, source: String) -> Result<Vec<Constant>, FileError> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(filename, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
-    let exports =
-        parsing_utils::module_exports(&mut parser, &source_map).map_err(FileError::ParsingError)?;
+    let module = parsing_utils::get_module(&mut parser, &source_map)?;
+    let exports = parsing_utils::get_module_exports(&module);
 
     let mut var_decls = exports
-        .into_iter()
+        .cloned()
         .filter_map(|export_decl| export_decl.decl.var());
 
     let api_urls_object_lit = var_decls
@@ -50,7 +56,7 @@ pub fn scrape(filename: FileName, source: String) -> Result<Vec<Constant>, FileE
         let key_value_pair = prop.prop()?.key_value()?;
 
         let ident = key_value_pair.key.ident()?;
-        let line_loc = parsing_utils::span_line_loc(ident.span, &source_map);
+        let line_loc = parsing_utils::get_span_line_loc(ident.span, &source_map);
         let name = ident.sym.to_string();
 
         let api_url = match key_value_pair.value.lit()? {
@@ -86,8 +92,8 @@ export const apiUrls = 10;
 
         let filename = FileName::Anon;
 
-        scrape(filename.clone(), object_literal.to_string()).unwrap();
-        let err = scrape(filename.clone(), not_object_literal.to_string()).unwrap_err();
+        parse(filename.clone(), object_literal.to_string()).unwrap();
+        let err = parse(filename.clone(), not_object_literal.to_string()).unwrap_err();
 
         assert_eq!(err, FileError::MissingApiUrlsExport);
     }
@@ -103,7 +109,7 @@ export const apiUrls = {
 "#;
 
         let filename = FileName::Anon;
-        let constants = scrape(filename, source.to_string()).unwrap();
+        let constants = parse(filename, source.to_string()).unwrap();
 
         assert_eq!(constants.len(), 3);
 
@@ -148,7 +154,7 @@ export const apiUrls = {
 "#;
 
         let filename = FileName::Anon;
-        let constants = scrape(filename, source.to_string()).unwrap();
+        let constants = parse(filename, source.to_string()).unwrap();
 
         assert_eq!(constants.len(), 3);
     }
@@ -158,7 +164,7 @@ export const apiUrls = {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/constants.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let constants = scrape(FileName::Anon, source).unwrap();
+        let constants = parse(FileName::Anon, source).unwrap();
 
         assert_eq!(constants.len(), 24);
     }
