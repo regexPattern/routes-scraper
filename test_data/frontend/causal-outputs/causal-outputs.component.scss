@@ -1,0 +1,44 @@
+.form-control {
+  font-size: 12px;
+  height: 26px;
+  padding-left: 5px;
+  padding-right: 5px;
+  display: inline-block;
+  width: 500px;
+}
+
+label {
+  font-size: 12px;
+  width: 100px;
+  vertical-align: top;
+  padding-top: 3px;
+}
+
+.body-content {
+  padding-top: 20px;
+  padding-bottom: 15px;
+}
+
+
+.btn-cancel {
+  margin-left: 15px;
+}
+
+.mat-dialog-content {
+  min-width: 400px;
+}
+
+
+.grid-content {
+  display: inline-block;
+  margin: 0;
+  width: 650px;
+  .grid-container {
+    clear: both;
+    .data-grid {
+      height: 300px;
+      margin-top: 0px;
+    }
+  }
+}
+
