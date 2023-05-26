@@ -18,9 +18,9 @@ pub struct FrontendDir {
     pub component_file: PathBuf,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ConstantUsage {
-    pub constant_info: Option<ConstantInfo>,
+    pub constant_info: ConstantInfo,
     pub service_info: Option<ServiceInfo>,
     pub component_info: Option<ComponentInfo>,
 }
@@ -45,12 +45,13 @@ pub struct ComponentInfo {
     pub usage_line_nr: usize,
 }
 
-pub fn query_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<ConstantUsage> {
+pub fn query_constant(
+    dir: FrontendDir,
+    api_url_query: &str,
+) -> anyhow::Result<Option<ConstantUsage>> {
     let constants = parse_file_with(&dir.constants_file, constants::from_source)?;
     let service_methods = parse_file_with(&dir.service_file, service::from_source)?;
     let service_usages = parse_file_with(&dir.component_file, component::from_source)?;
-
-    let mut constant_usage = ConstantUsage::default();
 
     let mut api_url_to_constant: HashMap<_, _> = constants
         .map(|constant| (constant.api_url.clone(), constant))
@@ -58,8 +59,11 @@ pub fn query_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<C
 
     let constant = match api_url_to_constant.remove(api_url_query) {
         Some(constant) => constant,
-        None => return Ok(constant_usage),
+        None => return Ok(None),
     };
+
+    let mut service_info = None;
+    let mut component_info = None;
 
     let mut constant_name_to_service_method: HashMap<_, _> = service_methods
         .map(|method| (method.used_constant_name.clone(), method))
@@ -71,26 +75,30 @@ pub fn query_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<C
             .collect();
 
         if let Some(service_usage) = method_name_to_usage.remove(&service_method.name) {
-            constant_usage.component_info = Some(ComponentInfo {
+            component_info = Some(ComponentInfo {
                 method_signature: service_usage.component_method_signature,
                 file_path: dir.component_file,
                 usage_line_nr: service_usage.location.line,
             });
         }
 
-        constant_usage.service_info = Some(ServiceInfo {
+        service_info = Some(ServiceInfo {
             method_signature: service_method.signature,
             file_path: dir.service_file,
         });
     }
 
-    constant_usage.constant_info = Some(ConstantInfo {
-        api_url: constant.api_url,
-        name: constant.name,
-        file_path: dir.constants_file,
-    });
+    let constant_usage = ConstantUsage {
+        constant_info: ConstantInfo {
+            api_url: constant.api_url,
+            name: constant.name,
+            file_path: dir.constants_file,
+        },
+        service_info,
+        component_info,
+    };
 
-    Ok(constant_usage)
+    Ok(Some(constant_usage))
 }
 
 #[derive(thiserror::Error, Debug)]

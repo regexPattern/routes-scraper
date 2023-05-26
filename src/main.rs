@@ -27,10 +27,15 @@ fn main() -> anyhow::Result<()> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.file_type().is_dir());
 
-    let mut frontend_constant_usages = query_frontend_constant(frontend_dirs, &cli.api_url_query)?;
-    let table_str = render_usage_table(frontend_constant_usages.next().unwrap());
+    let mut frontend_constant_usages =
+        query_frontend_constant(frontend_dirs, &cli.api_url_query)?.into_iter();
 
-    println!("{table_str}");
+    if let Some(usage) = frontend_constant_usages.next() {
+        let table_str = render_usage_table(usage);
+        println!("{table_str}");
+    } else {
+        println!("No usages were found");
+    }
 
     Ok(())
 }
@@ -42,7 +47,7 @@ fn children_at_depth_one(path: &Path) -> walkdir::IntoIter {
 fn query_frontend_constant(
     dirs: impl Iterator<Item = DirEntry>,
     api_url_query: &str,
-) -> anyhow::Result<impl Iterator<Item = ConstantUsage>> {
+) -> anyhow::Result<Vec<ConstantUsage>> {
     let mut usages = vec![];
 
     for dir in dirs {
@@ -52,15 +57,17 @@ fn query_frontend_constant(
         if let Ok(dir) = FrontendDir::try_from(files) {
             let usage = frontend::query_constant(dir, api_url_query)?;
 
-            usages.push(usage);
+            if let Some(usage) = usage {
+                usages.push(usage);
+            }
         }
     }
 
-    Ok(usages.into_iter())
+    Ok(usages)
 }
 
 #[derive(Default, Tabled)]
-struct ConstantInfoTable {
+struct UsageData {
     api_url: String,
     constant_name: String,
     constant_file: String,
@@ -82,28 +89,29 @@ fn valid_line_nr(line_nr: &usize) -> String {
 }
 
 fn render_usage_table(frontend_constant: ConstantUsage) -> String {
-    let mut table = ConstantInfoTable::default();
-
-    let frontend_constant = frontend_constant;
-
-    if let Some(constant_info) = frontend_constant.constant_info {
-        table.api_url = constant_info.api_url;
-        table.constant_name = constant_info.name;
-        table.constant_file = constant_info.file_path.to_string_lossy().to_string();
-    }
+    let mut usage_data = UsageData {
+        api_url: frontend_constant.constant_info.api_url,
+        constant_name: frontend_constant.constant_info.name,
+        constant_file: frontend_constant
+            .constant_info
+            .file_path
+            .to_string_lossy()
+            .to_string(),
+        ..Default::default()
+    };
 
     if let Some(service_info) = frontend_constant.service_info {
-        table.service_method_signature = service_info.method_signature;
-        table.service_file = service_info.file_path.to_string_lossy().to_string();
+        usage_data.service_method_signature = service_info.method_signature;
+        usage_data.service_file = service_info.file_path.to_string_lossy().to_string();
     }
 
     if let Some(component_info) = frontend_constant.component_info {
-        table.component_method_signature = component_info.method_signature;
-        table.component_file = component_info.file_path.to_string_lossy().to_string();
-        table.usage_line_nr = component_info.usage_line_nr;
+        usage_data.component_method_signature = component_info.method_signature;
+        usage_data.component_file = component_info.file_path.to_string_lossy().to_string();
+        usage_data.usage_line_nr = component_info.usage_line_nr;
     }
 
-    let mut table = Table::new([table]);
+    let mut table = Table::new([usage_data]);
 
     table
         .with(Style::modern())
