@@ -53,7 +53,6 @@ pub fn query_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<C
     let mut constant_usage = ConstantUsage::default();
 
     let mut api_url_to_constant: HashMap<_, _> = constants
-        .into_iter()
         .map(|constant| (constant.api_url.clone(), constant))
         .collect();
 
@@ -63,13 +62,11 @@ pub fn query_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<C
     };
 
     let mut constant_name_to_service_method: HashMap<_, _> = service_methods
-        .into_iter()
         .map(|method| (method.used_constant_name.clone(), method))
         .collect();
 
     if let Some(service_method) = constant_name_to_service_method.remove(&constant.name) {
         let mut method_name_to_usage: HashMap<_, _> = service_usages
-            .into_iter()
             .map(|usage| (usage.used_service.clone(), usage))
             .collect();
 

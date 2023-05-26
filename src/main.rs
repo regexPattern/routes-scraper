@@ -44,7 +44,7 @@ fn query_frontend_constant(
         let path = dir.path();
         let files = WalkDir::new(path).max_depth(1);
 
-        if let Some(dir) = FrontendDir::try_from(files).ok() {
+        if let Ok(dir) = FrontendDir::try_from(files) {
             let usage = frontend::query_constant(dir, api_url_query)?;
 
             usages.push(usage);

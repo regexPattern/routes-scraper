@@ -77,9 +77,12 @@ pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = Servic
         Regex::new(&format!(r#"this.{service_attribute}.(\w+)"#)).expect("Error compiling regex");
 
     let usages = parsing_utils::get_class_methods(class)
-        .flat_map(|method| get_service_usages_in_method(&method, &source_map, &service_usage_re));
+        .filter_map(move |method| {
+            get_service_usages_in_method(&method, &source_map, &service_usage_re)
+        })
+        .flatten();
 
-    Ok(usages.collect::<Vec<_>>().into_iter())
+    Ok(usages)
 }
 
 fn find_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> Option<String> {
@@ -151,9 +154,8 @@ fn get_service_usages_in_method(
     method: &ClassMethod,
     source_map: &SourceMap,
     service_usage_re: &Regex,
-) -> impl Iterator<Item = ServiceUsage> {
-    // TODO: Remove this unwrap.
-    let body = method.function.body.as_ref().unwrap();
+) -> Option<impl Iterator<Item = ServiceUsage>> {
+    let body = method.function.body.as_ref()?;
 
     let (_, signature) = parsing_utils::gen_method_name_and_signature(method, source_map).unwrap();
 
@@ -168,11 +170,13 @@ fn get_service_usages_in_method(
 
     all_children_visitor.visit_block_stmt(body);
 
-    all_children_visitor
-        .visitor
-        .usages
-        .into_iter()
-        .map(|usage| usage.1)
+    Some(
+        all_children_visitor
+            .visitor
+            .usages
+            .into_iter()
+            .map(|usage| usage.1),
+    )
 }
 
 #[cfg(test)]
@@ -342,6 +346,7 @@ export class Component {
                     &source_map,
                     &Regex::new(r#"this.causalService.(\w+)"#).unwrap(),
                 )
+                .unwrap()
             })
             .collect();
 
