@@ -54,32 +54,35 @@ pub fn get_module(
     })
 }
 
-pub fn get_module_exports(module: &Module) -> impl Iterator<Item = &ExportDecl> {
+pub fn get_module_exports(module: Module) -> impl Iterator<Item = ExportDecl> {
     module
         .body
-        .iter()
-        .filter_map(|mod_item| mod_item.as_module_decl()?.as_export_decl())
+        .into_iter()
+        .filter_map(|mod_item| mod_item.module_decl()?.export_decl())
 }
 
 pub fn line_loc_from_span(span: Span, source_map: &SourceMap) -> LineLoc {
     LineLoc::from(source_map.lookup_char_pos(span.lo))
 }
 
-pub fn get_first_exported_class<'e>(
-    mut exports: impl Iterator<Item = &'e ExportDecl>,
-) -> Option<&'e ClassDecl> {
-    exports.find_map(|export_decl| export_decl.decl.as_class())
+pub fn get_first_exported_class(
+    mut exports: impl Iterator<Item = ExportDecl>,
+) -> Option<ClassDecl> {
+    exports.find_map(|export_decl| export_decl.decl.class())
 }
 
-pub fn get_class_methods(class: &ClassDecl) -> impl Iterator<Item = &ClassMethod> {
+pub fn get_class_methods(class: ClassDecl) -> impl Iterator<Item = ClassMethod> {
     class
         .class
         .body
-        .iter()
-        .filter_map(|class_member| class_member.as_method())
+        .into_iter()
+        .filter_map(|class_member| class_member.method())
 }
 
-pub fn gen_method_signature(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
+pub fn gen_method_name_and_signature(
+    method: &ClassMethod,
+    source_map: &SourceMap,
+) -> Option<(String, String)> {
     let function = &method.function;
     let name = method.key.as_ident()?.sym.to_string();
 
@@ -87,23 +90,25 @@ pub fn gen_method_signature(method: &ClassMethod, source_map: &SourceMap) -> Opt
         .params
         .iter()
         .filter_map(|param| {
-            let mut params_str = source_map.span_to_snippet(param.span).ok()?;
+            let mut snippet = source_map.span_to_snippet(param.span).ok()?;
 
             if param.pat.as_ident()?.type_ann.is_none() {
-                params_str.push_str(": any")
+                snippet.push_str(": any")
             }
 
-            Some(params_str)
+            Some(snippet)
         })
         .collect();
 
     let return_type = if let Some(return_type) = function.return_type.as_ref() {
         source_map.span_to_snippet(return_type.span).ok()?
     } else {
-        ": any".to_string()
+        ": any".into()
     };
 
-    Some(format!("{name}({}){return_type}", params.join(", ")))
+    let signature = format!("{name}({}){return_type}", params.join(", "));
+
+    Some((name, signature))
 }
 
 #[cfg(test)]
@@ -119,7 +124,7 @@ function() {}
 "#;
 
         let source_map = SourceMap::default();
-        let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
+        let source_file = source_map.new_source_file(FileName::Anon, source.into());
         let mut parser = default_parser(&source_file);
 
         let err = get_module(&mut parser, &source_map).unwrap_err();
@@ -128,7 +133,7 @@ function() {}
     }
 
     #[test]
-    fn getting_a_methods_signature() {
+    fn getting_a_methods_name_and_signature() {
         let source = r#"
 export class Service {
     methodName(param1: number, param2: CustomType, param3): number {}
@@ -136,18 +141,22 @@ export class Service {
 "#;
 
         let source_map = SourceMap::default();
-        let source_file = source_map.new_source_file(FileName::Anon, source.to_string());
+        let source_file = source_map.new_source_file(FileName::Anon, source.into());
         let mut parser = default_parser(&source_file);
 
         let module = get_module(&mut parser, &source_map).unwrap();
-        let exports = get_module_exports(&module);
+        let exports = get_module_exports(module);
         let class_decl = get_first_exported_class(exports).unwrap();
 
-        let method = get_class_methods(&class_decl).next().unwrap();
+        let method = get_class_methods(class_decl).next().unwrap();
+
+        let (name, signature) = gen_method_name_and_signature(&method, &source_map).unwrap();
+
+        assert_eq!(name, "methodName");
 
         assert_eq!(
-            gen_method_signature(&method, &source_map),
-            Some("methodName(param1: number, param2: CustomType, param3: any): number".into())
+            signature,
+            "methodName(param1: number, param2: CustomType, param3: any): number"
         );
     }
 }
