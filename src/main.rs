@@ -9,8 +9,13 @@ use tabled::{
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser)]
+#[command(author, version, about)]
 struct Cli {
+    /// Path to the frontend root directory.
+    #[arg(short, long)]
     frontend: PathBuf,
+
+    /// API URL query
     api_url_query: String,
 }
 
