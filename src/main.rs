@@ -15,7 +15,7 @@ struct Cli {
     #[arg(short, long)]
     frontend: PathBuf,
 
-    /// API URL query
+    /// API URL query.
     api_url_query: String,
 }
 
@@ -27,10 +27,10 @@ fn main() -> anyhow::Result<()> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.file_type().is_dir());
 
-    let mut frontend_constant_usages =
-        query_frontend_constant(frontend_dirs, &cli.api_url_query)?.into_iter();
+    let frontend_constant_usages =
+        query_frontend_constant(frontend_dirs, &cli.api_url_query)?;
 
-    if let Some(usage) = frontend_constant_usages.next() {
+    if let Some(usage) = frontend_constant_usages {
         let table_str = render_usage_table(usage);
         println!("{table_str}");
     } else {
@@ -47,9 +47,7 @@ fn children_at_depth_one(path: &Path) -> walkdir::IntoIter {
 fn query_frontend_constant(
     dirs: impl Iterator<Item = DirEntry>,
     api_url_query: &str,
-) -> anyhow::Result<Vec<ConstantUsage>> {
-    let mut usages = vec![];
-
+) -> anyhow::Result<Option<ConstantUsage>> {
     for dir in dirs {
         let path = dir.path();
         let files = WalkDir::new(path).max_depth(1);
@@ -58,12 +56,12 @@ fn query_frontend_constant(
             let usage = frontend::query_constant(dir, api_url_query)?;
 
             if let Some(usage) = usage {
-                usages.push(usage);
+                return Ok(Some(usage));
             }
         }
     }
 
-    Ok(usages)
+    Ok(None)
 }
 
 #[derive(Default, Tabled)]
