@@ -87,7 +87,7 @@ pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = Servic
 
 fn find_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> Option<String> {
     lazy_static::lazy_static! {
-        static ref SERVICE_IMPORT_RE: Regex = Regex::new(r#"import\s?\{\s?(.*Service)\s?}\s?from\s?'./.*'"#).unwrap();
+        static ref SERVICE_IMPORT_RE: Regex = Regex::new(r#"import\s?\{\s?(.*Service)\s?}\s?from\s?['"]./.*['"]"#).unwrap();
     }
 
     let snippet = source_map.span_to_snippet(import.span).ok()?;
