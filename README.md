@@ -12,7 +12,7 @@ Ensure that you have the latest stable Rust toolchain installed. If you don't, y
 cargo install --git https://github.com/regexPattern/routes-scraper
 ```
 
-Remember that you should add your `$CARGO_PATH` to your shell path. Read more about this [here](https://rust-lang.github.io/rustup/installation/index.html).
+Remember that you should add your `$CARGO_HOME` to your shell path. Read more about this [here](https://rust-lang.github.io/rustup/installation/index.html).
 
 ## Usage 
 
