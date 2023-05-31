@@ -18,20 +18,20 @@ enum FileSpecError {
     MissingClassExport,
 }
 
-pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = ServiceMethod>> {
+pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceMethod>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(FileName::Anon, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
     let module = parsing_utils::get_module(&mut parser, &source_map)?;
-    let exports = parsing_utils::get_module_exports(module);
+    let exports = parsing_utils::get_esmodule_exports(module);
 
     let class = parsing_utils::get_first_exported_class(exports)
         .ok_or(FileSpecError::MissingClassExport)?;
 
     let methods = parsing_utils::get_class_methods(class).filter_map(move |method| {
         let (name, signature) = parsing_utils::gen_method_name_and_signature(&method, &source_map)?;
-        let used_constant_name = find_used_constant_name(&method, &source_map)?;
+        let used_constant_name = get_used_constant_name(&method, &source_map)?;
         let location = parsing_utils::line_loc_from_span(method.span, &source_map);
 
         Some(ServiceMethod {
@@ -45,7 +45,7 @@ pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = Servic
     Ok(methods)
 }
 
-fn find_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
+fn get_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
     lazy_static::lazy_static! {
         static ref CONSTANT_USAGE_RE: Regex = Regex::new(r#"apiUrls.([A-Z_]+)"#).unwrap();
     }
@@ -62,61 +62,57 @@ fn find_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Opti
 mod tests {
     use include_bytes_plus::include_bytes;
 
+    use crate::parsing_utils::testing_utils;
+
     use super::*;
 
     #[test]
     #[should_panic(expected = "Missing named export of a service class")]
-    fn service_file_must_have_a_class_export() {
+    fn a_service_file_must_have_a_class_export() {
         let source = r#"
 @Injectable()
 class Service {}
 "#;
 
-        from_source(source.into()).unwrap().last();
+        scrape(source.into()).unwrap().last();
     }
 
     #[test]
-    fn finding_which_api_url_is_used_in_a_method() {
-        let consumes_api_url = r#"
+    fn a_service_method_is_one_that_uses_an_api_url_constant() {
+        let source = r#"
 export class Service {
     method(): any {
         const api = globals.apiUrls.CONSTANT_NAME;
     }
 }
 "#;
+        let (mut methods, source_map) = testing_utils::get_class_methods(source);
+        let method = methods.next().unwrap();
 
-        let doesnt_consume_api_url = r#"
+        let constant_name = get_used_constant_name(&method, &source_map).unwrap();
+
+        assert_eq!(constant_name, "CONSTANT_NAME");
+    }
+
+    #[test]
+    fn ignoring_methods_that_dont_use_an_api_url_constant() {
+        let source = r#"
 export class Service {
     method(): any {
         const api = globals.notApiUrls.CONTANT_NAME;
     }
 }
-        "#;
+"#;
+        let (mut methods, source_map) = testing_utils::get_class_methods(source);
+        let method = methods.next().unwrap();
 
-        fn used_constant_name(source: &str) -> Option<String> {
-            let source_map = SourceMap::default();
-            let source_file = source_map.new_source_file(FileName::Anon, source.into());
-            let mut parser = parsing_utils::default_parser(&source_file);
+        let constant_name = get_used_constant_name(&method, &source_map);
 
-            let module = parsing_utils::get_module(&mut parser, &source_map).unwrap();
-            let exports = parsing_utils::get_module_exports(module);
-            let class = parsing_utils::get_first_exported_class(exports).unwrap();
-
-            let method = parsing_utils::get_class_methods(class).next().unwrap();
-
-            find_used_constant_name(&method, &source_map)
-        }
-
-        assert_eq!(
-            used_constant_name(consumes_api_url),
-            Some("CONSTANT_NAME".into())
-        );
-
-        assert_eq!(used_constant_name(doesnt_consume_api_url), None,);
+        assert_eq!(constant_name, None);
     }
 
     #[test]
-    fn getting_service_methods_from_source() {
+    fn scraping_service_methods_from_source() {
         let source = r#"
 export class Service {
   getMetaHierarchies(): any {
@@ -133,12 +129,12 @@ export class Service {
 }
 "#;
 
-        let methods: Vec<_> = from_source(source.into()).unwrap().collect();
+        let service_methods: Vec<_> = scrape(source.into()).unwrap().collect();
 
-        assert_eq!(methods.len(), 2);
+        assert_eq!(service_methods.len(), 2);
 
         assert_eq!(
-            &methods[0],
+            &service_methods[0],
             &ServiceMethod {
                 name: "getMetaHierarchies".into(),
                 signature: "getMetaHierarchies(): any".into(),
@@ -148,7 +144,7 @@ export class Service {
         );
 
         assert_eq!(
-            &methods[1],
+            &service_methods[1],
             &ServiceMethod {
                 name: "getMetaKpis".into(),
                 signature: "getMetaKpis(): any".into(),
@@ -159,12 +155,12 @@ export class Service {
     }
 
     #[test]
-    fn getting_causal_impact_service_methods_from_real_data() {
+    fn scraping_service_methods_from_real_data() {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal.service.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let methods: Vec<_> = from_source(source).unwrap().collect();
+        let service_methods = scrape(source).unwrap();
 
-        assert_eq!(methods.len(), 23);
+        assert_eq!(service_methods.count(), 23);
     }
 }

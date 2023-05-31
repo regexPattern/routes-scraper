@@ -18,13 +18,13 @@ enum FileSpecError {
     MissingApiUrlsExport,
 }
 
-pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> {
+pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(FileName::Anon, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
     let module = parsing_utils::get_module(&mut parser, &source_map)?;
-    let exports = parsing_utils::get_module_exports(module);
+    let exports = parsing_utils::get_esmodule_exports(module);
 
     let mut exported_variables = exports.filter_map(|export_decl| export_decl.decl.var());
 
@@ -78,7 +78,7 @@ mod tests {
 export const apiUrls = 10;
 "#;
 
-        from_source(source.into()).unwrap().last();
+        scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -91,7 +91,7 @@ export const apiUrls = {
 };
 "#;
 
-        let constants: Vec<_> = from_source(source.into()).unwrap().collect();
+        let constants: Vec<_> = scrape(source.into()).unwrap().collect();
 
         assert_eq!(constants.len(), 3);
 
@@ -135,18 +135,18 @@ export const apiUrls = {
 };
 "#;
 
-        let constants: Vec<_> = from_source(source.into()).unwrap().collect();
+        let constants = scrape(source.into()).unwrap();
 
-        assert_eq!(constants.len(), 3);
+        assert_eq!(constants.count(), 3);
     }
 
     #[test]
-    fn getting_causal_impact_constants_from_real_data() {
+    fn scraping_constants_from_real_data() {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/constants.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let constants: Vec<_> = from_source(source).unwrap().collect();
+        let constants = scrape(source).unwrap();
 
-        assert_eq!(constants.len(), 24);
+        assert_eq!(constants.count(), 24);
     }
 }

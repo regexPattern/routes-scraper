@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
 use swc_common::{Loc, SourceFile, SourceMap, SourceMapper, Span, Spanned};
-use swc_ecma_ast::{ClassDecl, ClassMethod, EsVersion, ExportDecl, Module};
+use swc_ecma_ast::{ClassDecl, ClassMethod, EsVersion, ExportDecl, Module, VarDecl};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
 pub fn default_parser(source_file: &SourceFile) -> Parser<Lexer> {
@@ -54,11 +54,18 @@ pub fn get_module(
     })
 }
 
-pub fn get_module_exports(module: Module) -> impl Iterator<Item = ExportDecl> {
+pub fn get_esmodule_exports(module: Module) -> impl Iterator<Item = ExportDecl> {
     module
         .body
         .into_iter()
         .filter_map(|mod_item| mod_item.module_decl()?.export_decl())
+}
+
+pub fn get_commonjs_module_exports(module: Module) -> impl Iterator<Item = Box<VarDecl>> {
+    module
+        .body
+        .into_iter()
+        .filter_map(|module_item| module_item.stmt()?.decl()?.var())
 }
 
 pub fn line_loc_from_span(span: Span, source_map: &SourceMap) -> LineLoc {
@@ -111,6 +118,30 @@ pub fn gen_method_name_and_signature(
     Some((name, signature))
 }
 
+pub mod testing_utils {
+    use swc_common::{FileName, SourceMap};
+    use swc_ecma_ast::{ClassDecl, ClassMethod};
+
+    pub fn get_first_exported_class(source: &str) -> (ClassDecl, SourceMap) {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source.into());
+        let mut parser = super::default_parser(&source_file);
+
+        let module = super::get_module(&mut parser, &source_map).unwrap();
+        let exports = super::get_esmodule_exports(module);
+
+        (
+            super::get_first_exported_class(exports).unwrap(),
+            source_map,
+        )
+    }
+
+    pub fn get_class_methods(source: &str) -> (impl Iterator<Item = ClassMethod>, SourceMap) {
+        let (class, source_map) = get_first_exported_class(source);
+        (super::get_class_methods(class), source_map)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use swc_common::FileName;
@@ -118,7 +149,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parsing_an_es_module_with_a_syntax_error() {
+    fn parsing_a_module_with_a_syntax_error() {
         let source = r#"
 function() {}
 "#;
@@ -140,15 +171,8 @@ export class Service {
 }
 "#;
 
-        let source_map = SourceMap::default();
-        let source_file = source_map.new_source_file(FileName::Anon, source.into());
-        let mut parser = default_parser(&source_file);
-
-        let module = get_module(&mut parser, &source_map).unwrap();
-        let exports = get_module_exports(module);
-        let class_decl = get_first_exported_class(exports).unwrap();
-
-        let method = get_class_methods(class_decl).next().unwrap();
+        let (mut methods, source_map) = testing_utils::get_class_methods(source);
+        let method = methods.next().unwrap();
 
         let (name, signature) = gen_method_name_and_signature(&method, &source_map).unwrap();
 

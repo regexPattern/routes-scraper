@@ -49,9 +49,9 @@ pub fn query_constant(
     dir: FrontendDir,
     api_url_query: &str,
 ) -> anyhow::Result<Option<ConstantUsage>> {
-    let constants = parse_file_with(&dir.constants_file, constants::from_source)?;
-    let service_methods = parse_file_with(&dir.service_file, service::from_source)?;
-    let service_usages = parse_file_with(&dir.component_file, component::from_source)?;
+    let constants = parse_file_with(&dir.constants_file, constants::scrape)?;
+    let service_methods = parse_file_with(&dir.service_file, service::scrape)?;
+    let service_usages = parse_file_with(&dir.component_file, component::scrape)?;
 
     let mut api_url_to_constant: HashMap<_, _> = constants
         .map(|constant| (constant.api_url.clone(), constant))
