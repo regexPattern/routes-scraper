@@ -8,47 +8,49 @@ use crate::parsing_utils::{self, LineLoc};
 
 #[derive(PartialEq, Debug)]
 pub struct RouteWithHandler {
-    base_url: String,
-    handler_source_path: PathBuf,
-    line_loc: LineLoc,
+    pub base_url: String,
+    pub handler_source_path: PathBuf,
+    pub line_loc: LineLoc,
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteWithHandler>> {
-    let source_map = SourceMap::default();
-    let source_file = source_map.new_source_file(FileName::Anon, source);
-    let mut parser = parsing_utils::default_parser(&source_file);
+impl RouteWithHandler {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteWithHandler>> {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source);
+        let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::get_module(&mut parser, &source_map)?;
+        let module = parsing_utils::get_module(&mut parser, &source_map)?;
 
-    let mut route_defs: HashMap<_, _> = module
-        .body
-        .iter()
-        .filter_map(|module_item| module_item.as_stmt()?.as_expr()?.expr.as_call())
-        .filter_map(|call_expr| {
-            let route_def = get_route_definition(call_expr, &source_map)?;
-            let base_url = route_def.base_url;
-            let line_loc = route_def.line_loc;
+        let mut route_defs: HashMap<_, _> = module
+            .body
+            .iter()
+            .filter_map(|module_item| module_item.as_stmt()?.as_expr()?.expr.as_call())
+            .filter_map(|call_expr| {
+                let route_def = get_route_definition(call_expr, &source_map)?;
+                let base_url = route_def.base_url;
+                let line_loc = route_def.line_loc;
 
-            Some((route_def.handler_name, (base_url, line_loc)))
-        })
-        .collect();
+                Some((route_def.handler_name, (base_url, line_loc)))
+            })
+            .collect();
 
-    let var_decls = parsing_utils::get_commonjs_module_var_decls(module);
+        let var_decls = parsing_utils::get_commonjs_module_var_decls(module);
 
-    let handlers =
-        var_decls.filter_map(move |var_decl| get_imported_handler(&var_decl, &source_map));
+        let handlers =
+            var_decls.filter_map(move |var_decl| get_imported_handler(&var_decl, &source_map));
 
-    let routes = handlers.into_iter().filter_map(move |handler| {
-        let (base_url, line_loc) = route_defs.remove(&handler.name)?;
+        let routes = handlers.into_iter().filter_map(move |handler| {
+            let (base_url, line_loc) = route_defs.remove(&handler.name)?;
 
-        Some(RouteWithHandler {
-            base_url,
-            handler_source_path: handler.source_path,
-            line_loc,
-        })
-    });
+            Some(RouteWithHandler {
+                base_url,
+                handler_source_path: handler.source_path,
+                line_loc,
+            })
+        });
 
-    Ok(routes)
+        Ok(routes)
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -192,7 +194,7 @@ app.use("/api/causal", causalRoutes({ query, auth0 }));
 app.use("/api/analysis", auth0, analysisRoutes({ query }));
 "#;
 
-        let app_routes: Vec<_> = scrape(source.into()).unwrap().collect();
+        let app_routes: Vec<_> = RouteWithHandler::scrape(source.into()).unwrap().collect();
 
         assert_eq!(app_routes.len(), 2);
 

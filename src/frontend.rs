@@ -21,10 +21,10 @@ pub struct FrontendDir {
 }
 
 #[derive(Debug)]
-pub struct ConstantUsage {
-    pub constant_info: ConstantInfo,
-    pub service_info: Option<ServiceInfo>,
-    pub component_info: Option<ComponentInfo>,
+pub struct FrontendQueryResult {
+    pub constant: ConstantInfo,
+    pub service: Option<ServiceInfo>,
+    pub component: Option<ComponentInfo>,
 }
 
 #[derive(Debug)]
@@ -50,7 +50,7 @@ pub struct ComponentInfo {
 pub fn query_constant(
     dir: FrontendDir,
     api_url_query: &str,
-) -> anyhow::Result<Option<ConstantUsage>> {
+) -> anyhow::Result<Option<FrontendQueryResult>> {
     let constants = parse_file_with(&dir.constants_file, Constant::scrape)?;
     let service_methods = parse_file_with(&dir.service_file, ServiceMethod::scrape)?;
     let service_usages = parse_file_with(&dir.component_file, ServiceUsage::scrape)?;
@@ -59,6 +59,9 @@ pub fn query_constant(
         .map(|constant| (constant.api_url.clone(), constant))
         .collect();
 
+    // NOTE: If we want to implement fuzzy finding or substring equality for a given route query,
+    // we would have to change this part.
+    //
     let constant = match api_url_to_constant.remove(api_url_query) {
         Some(constant) => constant,
         None => return Ok(None),
@@ -90,14 +93,14 @@ pub fn query_constant(
         });
     }
 
-    let constant_usage = ConstantUsage {
-        constant_info: ConstantInfo {
+    let constant_usage = FrontendQueryResult {
+        constant: ConstantInfo {
             api_url: constant.api_url,
             name: constant.name,
             file_path: dir.constants_file,
         },
-        service_info,
-        component_info,
+        service: service_info,
+        component: component_info,
     };
 
     Ok(Some(constant_usage))
@@ -139,5 +142,5 @@ where
     P: Fn(String) -> anyhow::Result<T>,
 {
     let source = fs::read_to_string(path)?;
-    parser_fn(source).with_context(|| format!("Failed to parse {:?}", path))
+    parser_fn(source).with_context(|| format!("Failed parsing {:?}", path))
 }

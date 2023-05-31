@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use routes_scraper::frontend::{self, ConstantUsage, FrontendDir};
+use routes_scraper::{
+    backend,
+    frontend::{self, FrontendDir, FrontendQueryResult},
+};
 use tabled::{
     settings::{Rotate, Style},
     Table, Tabled,
@@ -15,6 +18,10 @@ struct Cli {
     #[arg(short, long)]
     frontend: PathBuf,
 
+    /// Path to the backend root directory with an `app.js` file.
+    #[arg(short, long)]
+    backend: PathBuf,
+
     /// API URL query.
     api_url_query: String,
 }
@@ -27,15 +34,15 @@ fn main() -> anyhow::Result<()> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.file_type().is_dir());
 
-    let frontend_constant_usages =
-        query_frontend_constant(frontend_dirs, &cli.api_url_query)?;
+    // let frontend_constant_usage = query_frontend_constant(frontend_dirs, &cli.api_url_query)?;
+    let backend_handler_def = backend::query_handler(&cli.backend, &cli.api_url_query)?;
 
-    if let Some(usage) = frontend_constant_usages {
-        let table_str = render_usage_table(usage);
-        println!("{table_str}");
-    } else {
-        println!("No usages were found");
-    }
+    // if let Some(usage) = frontend_constant_usage {
+    //     let table_str = render_usage_table(usage);
+    //     println!("{table_str}");
+    // } else {
+    //     println!("No usages were found");
+    // }
 
     Ok(())
 }
@@ -47,7 +54,7 @@ fn children_at_depth_one(path: &Path) -> walkdir::IntoIter {
 fn query_frontend_constant(
     dirs: impl Iterator<Item = DirEntry>,
     api_url_query: &str,
-) -> anyhow::Result<Option<ConstantUsage>> {
+) -> anyhow::Result<Option<FrontendQueryResult>> {
     for dir in dirs {
         let path = dir.path();
         let files = WalkDir::new(path).max_depth(1);
@@ -86,24 +93,24 @@ fn valid_line_nr(line_nr: &usize) -> String {
     }
 }
 
-fn render_usage_table(frontend_constant: ConstantUsage) -> String {
+fn render_usage_table(frontend_constant: FrontendQueryResult) -> String {
     let mut usage_data = UsageData {
-        api_url: frontend_constant.constant_info.api_url,
-        constant_name: frontend_constant.constant_info.name,
+        api_url: frontend_constant.constant.api_url,
+        constant_name: frontend_constant.constant.name,
         constant_file: frontend_constant
-            .constant_info
+            .constant
             .file_path
             .to_string_lossy()
             .to_string(),
         ..Default::default()
     };
 
-    if let Some(service_info) = frontend_constant.service_info {
+    if let Some(service_info) = frontend_constant.service {
         usage_data.service_method_signature = service_info.method_signature;
         usage_data.service_file = service_info.file_path.to_string_lossy().to_string();
     }
 
-    if let Some(component_info) = frontend_constant.component_info {
+    if let Some(component_info) = frontend_constant.component {
         usage_data.component_method_signature = component_info.method_signature;
         usage_data.component_file = component_info.file_path.to_string_lossy().to_string();
         usage_data.usage_line_nr = component_info.usage_line_nr;

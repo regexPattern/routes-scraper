@@ -5,8 +5,8 @@ use crate::parsing_utils::{self, LineLoc};
 
 #[derive(PartialEq, Debug)]
 pub struct RouteHandlerDefinition {
-    url_suffix: String,
-    line_loc: LineLoc,
+    pub url_suffix: String,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
@@ -18,33 +18,37 @@ enum FileSpecError {
     WrapperArrowFuncWithoutBlockStmt(LineLoc),
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteHandlerDefinition>> {
-    let source_map = SourceMap::default();
-    let source_file = source_map.new_source_file(FileName::Anon, source);
-    let mut parser = parsing_utils::default_parser(&source_file);
+impl RouteHandlerDefinition {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteHandlerDefinition>> {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source);
+        let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::get_module(&mut parser, &source_map)?;
-    let mut var_decls = parsing_utils::get_commonjs_module_var_decls(module);
+        let module = parsing_utils::get_module(&mut parser, &source_map)?;
+        let mut var_decls = parsing_utils::get_commonjs_module_var_decls(module);
 
-    let wrapper = var_decls
-        .find_map(|var_decl| parsing_utils::var_with_pattern_value(var_decl, "wrapper")?.arrow())
-        .ok_or(FileSpecError::MissingHandlersWrapper)?;
+        let wrapper = var_decls
+            .find_map(|var_decl| {
+                parsing_utils::var_with_pattern_value(var_decl, "wrapper")?.arrow()
+            })
+            .ok_or(FileSpecError::MissingHandlersWrapper)?;
 
-    let wrapper_line_loc = parsing_utils::line_loc_from_span(wrapper.span, &source_map);
-    let wrapper_stmts = wrapper
-        .body
-        .block_stmt()
-        .ok_or(FileSpecError::WrapperArrowFuncWithoutBlockStmt(
-            wrapper_line_loc,
-        ))?
-        .stmts;
+        let wrapper_line_loc = parsing_utils::line_loc_from_span(wrapper.span, &source_map);
+        let wrapper_stmts = wrapper
+            .body
+            .block_stmt()
+            .ok_or(FileSpecError::WrapperArrowFuncWithoutBlockStmt(
+                wrapper_line_loc,
+            ))?
+            .stmts;
 
-    let handlers = wrapper_stmts
-        .into_iter()
-        .filter_map(|stmt| stmt.expr()?.expr.call())
-        .filter_map(move |call_expr| get_route_handler(&call_expr, &source_map));
+        let handlers = wrapper_stmts
+            .into_iter()
+            .filter_map(|stmt| stmt.expr()?.expr.call())
+            .filter_map(move |call_expr| get_route_handler(&call_expr, &source_map));
 
-    Ok(handlers)
+        Ok(handlers)
+    }
 }
 
 fn get_route_handler(
@@ -67,6 +71,8 @@ fn get_route_handler(
 
 #[cfg(test)]
 mod tests {
+    use include_bytes_plus::include_bytes;
+
     use super::*;
 
     #[test]
@@ -76,7 +82,9 @@ mod tests {
 const wrapper = 10;
 "#;
 
-        scrape(source.into()).unwrap();
+        RouteHandlerDefinition::scrape(source.into())
+            .unwrap()
+            .last();
     }
 
     #[test]
@@ -88,7 +96,9 @@ const wrapper = 10;
 const wrapper = () => 10;
 "#;
 
-        scrape(source.into()).unwrap();
+        RouteHandlerDefinition::scrape(source.into())
+            .unwrap()
+            .last();
     }
 
     #[test]
@@ -109,7 +119,9 @@ const wrapper = () => {
 };
 "#;
 
-        let route_handlers: Vec<_> = scrape(source.into()).unwrap().collect();
+        let route_handlers: Vec<_> = RouteHandlerDefinition::scrape(source.into())
+            .unwrap()
+            .collect();
 
         assert_eq!(route_handlers.len(), 2);
 
@@ -128,5 +140,15 @@ const wrapper = () => {
                 line_loc: LineLoc { line: 7, col: 2 },
             }
         );
+    }
+
+    #[test]
+    fn scraping_route_handlers_from_real_data() {
+        let bytes = include_bytes!("./test_data/backend/src/routes/causalRoutes.js");
+        let source = String::from_utf8(bytes.into()).unwrap();
+
+        let constants = RouteHandlerDefinition::scrape(source).unwrap();
+
+        assert_eq!(constants.count(), 22);
     }
 }
