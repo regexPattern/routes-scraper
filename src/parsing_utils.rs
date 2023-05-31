@@ -61,11 +61,11 @@ pub fn get_esmodule_exports(module: Module) -> impl Iterator<Item = ExportDecl> 
         .filter_map(|mod_item| mod_item.module_decl()?.export_decl())
 }
 
-pub fn get_commonjs_module_exports(module: Module) -> impl Iterator<Item = Box<VarDecl>> {
+pub fn get_commonjs_module_var_decls(module: Module) -> impl Iterator<Item = VarDecl> {
     module
         .body
         .into_iter()
-        .filter_map(|module_item| module_item.stmt()?.decl()?.var())
+        .filter_map(|module_item| module_item.stmt()?.decl()?.var().map(|var| *var))
 }
 
 pub fn line_loc_from_span(span: Span, source_map: &SourceMap) -> LineLoc {
@@ -120,7 +120,7 @@ pub fn gen_method_name_and_signature(
 
 pub mod testing_utils {
     use swc_common::{FileName, SourceMap};
-    use swc_ecma_ast::{ClassDecl, ClassMethod};
+    use swc_ecma_ast::{ClassDecl, ClassMethod, VarDecl};
 
     pub fn get_first_exported_class(source: &str) -> (ClassDecl, SourceMap) {
         let source_map = SourceMap::default();
@@ -139,6 +139,19 @@ pub mod testing_utils {
     pub fn get_class_methods(source: &str) -> (impl Iterator<Item = ClassMethod>, SourceMap) {
         let (class, source_map) = get_first_exported_class(source);
         (super::get_class_methods(class), source_map)
+    }
+
+    pub fn get_first_var_decl_commonjs(source: &str) -> (VarDecl, SourceMap) {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source.into());
+        let mut parser = super::default_parser(&source_file);
+
+        let module = super::get_module(&mut parser, &source_map).unwrap();
+
+        (
+            super::get_commonjs_module_var_decls(module).next().unwrap(),
+            source_map,
+        )
     }
 }
 

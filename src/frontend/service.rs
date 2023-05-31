@@ -50,10 +50,10 @@ fn get_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Optio
         static ref CONSTANT_USAGE_RE: Regex = Regex::new(r#"apiUrls.([A-Z_]+)"#).unwrap();
     }
 
-    let snippet = source_map.span_to_snippet(method.span).ok()?;
+    let method_snippet = source_map.span_to_snippet(method.span).ok()?;
 
     CONSTANT_USAGE_RE
-        .captures(&snippet)?
+        .captures(&method_snippet)?
         .get(1)
         .map(|capture| capture.as_str().to_owned())
 }

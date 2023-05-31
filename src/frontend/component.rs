@@ -90,10 +90,10 @@ fn get_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> Option
         static ref SERVICE_IMPORT_RE: Regex = Regex::new(r#"import\s?\{\s?(.*Service)\s?}\s?from\s?['"]./.*['"]"#).unwrap();
     }
 
-    let snippet = source_map.span_to_snippet(import.span).ok()?;
+    let import_snippet = source_map.span_to_snippet(import.span).ok()?;
 
     SERVICE_IMPORT_RE
-        .captures(&snippet)?
+        .captures(&import_snippet)?
         .get(1)
         .map(|capture| capture.as_str().to_owned())
 }
@@ -103,10 +103,10 @@ fn get_service_attribute_name(
     source_map: &SourceMap,
     service_class_name_re: &Regex,
 ) -> Option<String> {
-    let snippet = source_map.span_to_snippet(param.span).ok()?;
+    let param_snippet = source_map.span_to_snippet(param.span).ok()?;
 
     service_class_name_re
-        .captures(&snippet)?
+        .captures(&param_snippet)?
         .get(1)
         .map(|capture| capture.as_str().to_owned())
 }
@@ -187,18 +187,6 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    #[should_panic(expected = "Missing named export of a component class")]
-    fn component_file_must_have_a_class_export() {
-        let source = r#"
-import { Service } from './service';
-
-class Service {}
-"#;
-
-        scrape(source.into()).unwrap().last();
-    }
-
     fn get_first_import(source: &str) -> (ImportDecl, SourceMap) {
         let source_map = SourceMap::default();
         let source_file = source_map.new_source_file(FileName::Anon, source.into());
@@ -214,6 +202,18 @@ class Service {}
                 .unwrap(),
             source_map,
         )
+    }
+
+    #[test]
+    #[should_panic(expected = "Missing named export of a component class")]
+    fn component_file_must_have_a_class_export() {
+        let source = r#"
+import { Service } from './service';
+
+class Service {}
+"#;
+
+        scrape(source.into()).unwrap().last();
     }
 
     #[test]
