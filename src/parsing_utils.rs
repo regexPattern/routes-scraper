@@ -1,7 +1,10 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    collections::VecDeque,
+    fmt::{self, Display, Formatter},
+};
 
 use swc_common::{Loc, SourceFile, SourceMap, SourceMapper, Span, Spanned};
-use swc_ecma_ast::{ClassDecl, ClassMethod, EsVersion, ExportDecl, Module, VarDecl};
+use swc_ecma_ast::{ClassDecl, ClassMethod, EsVersion, ExportDecl, Expr, Module, VarDecl};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
 pub fn default_parser(source_file: &SourceFile) -> Parser<Lexer> {
@@ -66,6 +69,17 @@ pub fn get_commonjs_module_var_decls(module: Module) -> impl Iterator<Item = Var
         .body
         .into_iter()
         .filter_map(|module_item| module_item.stmt()?.decl()?.var().map(|var| *var))
+}
+
+pub fn var_with_pattern_value(var_decl: VarDecl, pattern: &str) -> Option<Expr> {
+    let mut decls = VecDeque::from(var_decl.decls);
+    let var_declarator = decls.pop_front()?;
+
+    if var_declarator.name.as_ident()?.sym == *pattern {
+        var_declarator.init.map(|init| *init)
+    } else {
+        None
+    }
 }
 
 pub fn line_loc_from_span(span: Span, source_map: &SourceMap) -> LineLoc {

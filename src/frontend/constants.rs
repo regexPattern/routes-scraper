@@ -29,18 +29,7 @@ pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> 
     let mut exported_variables = exports.filter_map(|export_decl| export_decl.decl.var());
 
     let api_urls = exported_variables
-        .find_map(|var_decl| {
-            // We only care about the first variable declaration in a variable's pattern because
-            // right now we only support single identifiers. We need ownership.
-            let mut decls = VecDeque::from(var_decl.decls);
-            let var_declarator = decls.pop_front()?;
-
-            if var_declarator.name.as_ident()?.sym == *"apiUrls" {
-                var_declarator.init?.object()
-            } else {
-                None
-            }
-        })
+        .find_map(|var_decl| parsing_utils::var_with_pattern_value(*var_decl, "apiUrls")?.object())
         .ok_or(FileSpecError::MissingApiUrlsExport)?;
 
     let constants = api_urls.props.into_iter().filter_map(move |prop| {
@@ -82,7 +71,7 @@ export const apiUrls = 10;
     }
 
     #[test]
-    fn getting_constants_from_source() {
+    fn scraping_constants_from_source() {
         let source = r#"
 export const apiUrls = {
   GET_RESULTS: '/api/causal/results',
