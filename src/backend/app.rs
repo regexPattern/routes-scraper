@@ -7,61 +7,58 @@ use swc_ecma_ast::{CallExpr, Lit, VarDecl};
 use crate::parsing_utils::{self, LineLoc};
 
 #[derive(PartialEq, Debug)]
-pub struct AppRoute {
+pub struct RouteWithHandler {
     base_url: String,
-    handler: RouteHandlerCallback,
+    handler_source_path: PathBuf,
     line_loc: LineLoc,
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = AppRoute>> {
+pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteWithHandler>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(FileName::Anon, source);
     let mut parser = parsing_utils::default_parser(&source_file);
 
     let module = parsing_utils::get_module(&mut parser, &source_map)?;
 
-    // PERF: I don't know if dumping everything into a hashmap and cloning the callback name string
-    // is a good idea. There a lots of places where info is repeated, for example, the name of the
-    // imported callback matches the filename of the import path. Maybe I could take advantage of
-    // that.
-    //
-    let mut route_and_cbs: HashMap<_, _> = module
+    let mut route_defs: HashMap<_, _> = module
         .body
         .iter()
         .filter_map(|module_item| module_item.as_stmt()?.as_expr()?.expr.as_call())
         .filter_map(|call_expr| {
-            let route_and_cb = get_app_route_and_callback(call_expr, &source_map)?;
-            Some((route_and_cb.callback_name.clone(), route_and_cb))
+            let route_def = get_route_definition(call_expr, &source_map)?;
+            let base_url = route_def.base_url;
+            let line_loc = route_def.line_loc;
+
+            Some((route_def.handler_name, (base_url, line_loc)))
         })
         .collect();
 
     let var_decls = parsing_utils::get_commonjs_module_var_decls(module);
-    let route_handlers =
-        var_decls.filter_map(move |var_decl| get_imported_route_handler(&var_decl, &source_map));
 
-    let app_routes = route_handlers.into_iter().filter_map(move |handler| {
-        let route_and_cb = route_and_cbs.remove(&handler.name)?;
-        Some(AppRoute {
-            base_url: route_and_cb.route,
-            handler,
-            line_loc: route_and_cb.line_loc,
+    let handlers =
+        var_decls.filter_map(move |var_decl| get_imported_handler(&var_decl, &source_map));
+
+    let routes = handlers.into_iter().filter_map(move |handler| {
+        let (base_url, line_loc) = route_defs.remove(&handler.name)?;
+
+        Some(RouteWithHandler {
+            base_url,
+            handler_source_path: handler.source_path,
+            line_loc,
         })
     });
 
-    Ok(app_routes)
+    Ok(routes)
 }
 
 #[derive(PartialEq, Debug)]
-struct AppRouteAndCallback {
-    route: String,
-    callback_name: String,
+struct RouteDefinition {
+    base_url: String,
+    handler_name: String,
     line_loc: LineLoc,
 }
 
-fn get_app_route_and_callback(
-    call_expr: &CallExpr,
-    source_map: &SourceMap,
-) -> Option<AppRouteAndCallback> {
+fn get_route_definition(call_expr: &CallExpr, source_map: &SourceMap) -> Option<RouteDefinition> {
     let callee_span = call_expr.callee.as_expr()?.as_member()?.span;
     let called_function_snippet = source_map.span_to_snippet(callee_span).ok()?;
     let line_loc = parsing_utils::line_loc_from_span(callee_span, source_map);
@@ -78,25 +75,22 @@ fn get_app_route_and_callback(
     };
 
     let callback = args.last().map(|expr| expr.expr.as_call()).flatten()?;
-    let callback_name = callback.callee.as_expr()?.as_ident()?.sym.to_string();
+    let handler_name = callback.callee.as_expr()?.as_ident()?.sym.to_string();
 
-    Some(AppRouteAndCallback {
-        route,
-        callback_name,
+    Some(RouteDefinition {
+        base_url: route,
+        handler_name,
         line_loc,
     })
 }
 
 #[derive(PartialEq, Debug)]
-struct RouteHandlerCallback {
+struct Handler {
     name: String,
     source_path: PathBuf,
 }
 
-fn get_imported_route_handler(
-    var_decl: &VarDecl,
-    source_map: &SourceMap,
-) -> Option<RouteHandlerCallback> {
+fn get_imported_handler(var_decl: &VarDecl, source_map: &SourceMap) -> Option<Handler> {
     lazy_static::lazy_static! {
         static ref ROUTE_IMPORT_RE: Regex = Regex::new(r#"(\w+)\s?=\s?require\(['"](\./src/routes/.*)['"]\)"#).unwrap();
     }
@@ -107,7 +101,7 @@ fn get_imported_route_handler(
     let import_name = captures.get(1)?.as_str().to_owned();
     let import_path = captures.get(2)?.as_str().to_owned();
 
-    Some(RouteHandlerCallback {
+    Some(Handler {
         name: import_name,
         source_path: import_path.into(),
     })
@@ -144,11 +138,11 @@ const causalRoutes = require("./src/routes/causalRoutes");
 
         let (import, source_map) = testing_utils::get_first_var_decl_commonjs(source);
 
-        let route_handler = get_imported_route_handler(&import, &source_map).unwrap();
+        let route_handler = get_imported_handler(&import, &source_map).unwrap();
 
         assert_eq!(
             route_handler,
-            RouteHandlerCallback {
+            Handler {
                 name: "causalRoutes".into(),
                 source_path: "./src/routes/causalRoutes".into(),
             }
@@ -163,7 +157,7 @@ const startListener = require("./src/utils/startListener");
 
         let (import, source_map) = testing_utils::get_first_var_decl_commonjs(source);
 
-        let route_name = get_imported_route_handler(&import, &source_map);
+        let route_name = get_imported_handler(&import, &source_map);
 
         assert_eq!(route_name, None);
     }
@@ -176,13 +170,13 @@ app.use("/api/analysis", auth0, analysisRoutes({ query }));
 
         let (call_expr, source_map) = get_first_call_expr(source);
 
-        let route_and_cb = get_app_route_and_callback(&call_expr, &source_map).unwrap();
+        let route_and_cb = get_route_definition(&call_expr, &source_map).unwrap();
 
         assert_eq!(
             route_and_cb,
-            AppRouteAndCallback {
-                route: "/api/analysis".into(),
-                callback_name: "analysisRoutes".into(),
+            RouteDefinition {
+                base_url: "/api/analysis".into(),
+                handler_name: "analysisRoutes".into(),
                 line_loc: LineLoc { line: 2, col: 0 },
             }
         );
@@ -202,21 +196,15 @@ app.use("/api/analysis", auth0, analysisRoutes({ query }));
 
         assert_eq!(app_routes.len(), 2);
 
-        assert!(app_routes.contains(&AppRoute {
+        assert!(app_routes.contains(&RouteWithHandler {
             base_url: "/api/causal".into(),
-            handler: RouteHandlerCallback {
-                name: "causalRoutes".into(),
-                source_path: "./src/routes/causalRoutes".into(),
-            },
+            handler_source_path: "./src/routes/causalRoutes".into(),
             line_loc: LineLoc { line: 5, col: 0 },
         }));
 
-        assert!(app_routes.contains(&AppRoute {
+        assert!(app_routes.contains(&RouteWithHandler {
             base_url: "/api/analysis".into(),
-            handler: RouteHandlerCallback {
-                name: "analysisRoutes".into(),
-                source_path: "./src/routes/analysisRoutes".into(),
-            },
+            handler_source_path: "./src/routes/analysisRoutes".into(),
             line_loc: LineLoc { line: 6, col: 0 },
         }));
     }

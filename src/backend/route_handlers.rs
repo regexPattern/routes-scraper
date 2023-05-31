@@ -1,13 +1,11 @@
-use std::collections::VecDeque;
-
 use swc_common::{FileName, SourceMap};
 use swc_ecma_ast::{CallExpr, Lit};
 
 use crate::parsing_utils::{self, LineLoc};
 
 #[derive(PartialEq, Debug)]
-pub struct RouteHandler {
-    url: String,
+pub struct RouteHandlerDefinition {
+    url_suffix: String,
     line_loc: LineLoc,
 }
 
@@ -20,7 +18,7 @@ enum FileSpecError {
     WrapperArrowFuncWithoutBlockStmt(LineLoc),
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteHandler>> {
+pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteHandlerDefinition>> {
     let source_map = SourceMap::default();
     let source_file = source_map.new_source_file(FileName::Anon, source);
     let mut parser = parsing_utils::default_parser(&source_file);
@@ -49,7 +47,10 @@ pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = RouteHandle
     Ok(handlers)
 }
 
-fn get_route_handler(call_expr: &CallExpr, source_map: &SourceMap) -> Option<RouteHandler> {
+fn get_route_handler(
+    call_expr: &CallExpr,
+    source_map: &SourceMap,
+) -> Option<RouteHandlerDefinition> {
     let line_loc = parsing_utils::line_loc_from_span(call_expr.span, &source_map);
     let args = &call_expr.args;
 
@@ -58,8 +59,8 @@ fn get_route_handler(call_expr: &CallExpr, source_map: &SourceMap) -> Option<Rou
         _ => return None,
     };
 
-    Some(RouteHandler {
-        url: route,
+    Some(RouteHandlerDefinition {
+        url_suffix: route,
         line_loc,
     })
 }
@@ -114,16 +115,16 @@ const wrapper = () => {
 
         assert_eq!(
             &route_handlers[0],
-            &RouteHandler {
-                url: "/meta/hierarchies".into(),
+            &RouteHandlerDefinition {
+                url_suffix: "/meta/hierarchies".into(),
                 line_loc: LineLoc { line: 3, col: 2 },
             }
         );
 
         assert_eq!(
             &route_handlers[1],
-            &RouteHandler {
-                url: "/summaries/:testId".into(),
+            &RouteHandlerDefinition {
+                url_suffix: "/summaries/:testId".into(),
                 line_loc: LineLoc { line: 7, col: 2 },
             }
         );

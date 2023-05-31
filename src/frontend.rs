@@ -11,6 +11,8 @@ use std::{
 use anyhow::Context;
 use walkdir::WalkDir;
 
+use self::{component::ServiceUsage, constants::Constant, service::ServiceMethod};
+
 #[derive(PartialEq, Debug)]
 pub struct FrontendDir {
     pub constants_file: PathBuf,
@@ -49,9 +51,9 @@ pub fn query_constant(
     dir: FrontendDir,
     api_url_query: &str,
 ) -> anyhow::Result<Option<ConstantUsage>> {
-    let constants = parse_file_with(&dir.constants_file, constants::scrape)?;
-    let service_methods = parse_file_with(&dir.service_file, service::scrape)?;
-    let service_usages = parse_file_with(&dir.component_file, component::scrape)?;
+    let constants = parse_file_with(&dir.constants_file, Constant::scrape)?;
+    let service_methods = parse_file_with(&dir.service_file, ServiceMethod::scrape)?;
+    let service_usages = parse_file_with(&dir.component_file, ServiceUsage::scrape)?;
 
     let mut api_url_to_constant: HashMap<_, _> = constants
         .map(|constant| (constant.api_url.clone(), constant))

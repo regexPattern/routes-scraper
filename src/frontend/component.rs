@@ -31,58 +31,64 @@ pub enum FileSpecError {
     ServiceNotStoredAsAttribute(LineLoc),
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceUsage>> {
-    let source_map = SourceMap::default();
-    let source_file = source_map.new_source_file(FileName::Anon, source);
-    let mut parser = parsing_utils::default_parser(&source_file);
+impl ServiceUsage {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceUsage>> {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source);
+        let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::get_module(&mut parser, &source_map)?;
+        let module = parsing_utils::get_module(&mut parser, &source_map)?;
 
-    let service_class_name = module
-        .body
-        .iter()
-        .filter_map(|mod_item| mod_item.as_module_decl()?.as_import())
-        .find_map(|import| get_service_class_name(import, &source_map))
-        .ok_or(FileSpecError::MissingServiceImport)?;
+        let service_class_name = module
+            .body
+            .iter()
+            .filter_map(|mod_item| mod_item.as_module_decl()?.as_import())
+            .find_map(|import| get_service_class_name(import, &source_map))
+            .ok_or(FileSpecError::MissingServiceImport)?;
 
-    #[allow(clippy::expect_used)]
-    let service_class_re =
-        Regex::new(&format!(r#"(\w+): {service_class_name}"#)).expect("Error compiling regex");
+        #[allow(clippy::expect_used)]
+        let service_class_re =
+            Regex::new(&format!(r#"(\w+): {service_class_name}"#)).expect("Error compiling regex");
 
-    let mut exports = parsing_utils::get_esmodule_exports(module);
+        let mut exports = parsing_utils::get_esmodule_exports(module);
 
-    let class = exports
-        .find_map(|export_decl| export_decl.decl.class())
-        .ok_or(FileSpecError::MissingClassExport)?;
+        let class = exports
+            .find_map(|export_decl| export_decl.decl.class())
+            .ok_or(FileSpecError::MissingClassExport)?;
 
-    let constructor = class
-        .class
-        .body
-        .iter()
-        .find_map(|class_member| class_member.as_constructor())
-        .ok_or(FileSpecError::MissingClassConstructor)?;
+        let constructor = class
+            .class
+            .body
+            .iter()
+            .find_map(|class_member| class_member.as_constructor())
+            .ok_or(FileSpecError::MissingClassConstructor)?;
 
-    let service_attribute = constructor
-        .params
-        .iter()
-        .find_map(|param| {
-            get_service_attribute_name(param.as_ts_param_prop()?, &source_map, &service_class_re)
-        })
-        .ok_or(FileSpecError::ServiceNotStoredAsAttribute(
-            parsing_utils::line_loc_from_span(constructor.span, &source_map),
-        ))?;
+        let service_attribute = constructor
+            .params
+            .iter()
+            .find_map(|param| {
+                get_service_attribute_name(
+                    param.as_ts_param_prop()?,
+                    &source_map,
+                    &service_class_re,
+                )
+            })
+            .ok_or(FileSpecError::ServiceNotStoredAsAttribute(
+                parsing_utils::line_loc_from_span(constructor.span, &source_map),
+            ))?;
 
-    #[allow(clippy::expect_used)]
-    let service_usage_re =
-        Regex::new(&format!(r#"this.{service_attribute}.(\w+)"#)).expect("Error compiling regex");
+        #[allow(clippy::expect_used)]
+        let service_usage_re = Regex::new(&format!(r#"this.{service_attribute}.(\w+)"#))
+            .expect("Error compiling regex");
 
-    let usages = parsing_utils::get_class_methods(class)
-        .filter_map(move |method| {
-            get_service_usages_in_method(&method, &source_map, &service_usage_re)
-        })
-        .flatten();
+        let usages = parsing_utils::get_class_methods(class)
+            .filter_map(move |method| {
+                get_service_usages_in_method(&method, &source_map, &service_usage_re)
+            })
+            .flatten();
 
-    Ok(usages)
+        Ok(usages)
+    }
 }
 
 fn get_service_class_name(import: &ImportDecl, source_map: &SourceMap) -> Option<String> {
@@ -213,7 +219,7 @@ import { Service } from './service';
 class Service {}
 "#;
 
-        scrape(source.into()).unwrap().last();
+        ServiceUsage::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -248,7 +254,7 @@ import { Service } from '../parent_dir';
 export class Service {}
 "#;
 
-        scrape(source.into()).unwrap().last();
+        ServiceUsage::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -260,7 +266,7 @@ import { Service } from './service';
 export class Service {}
 "#;
 
-        scrape(source.into()).unwrap().last();
+        ServiceUsage::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -313,7 +319,7 @@ export class Service {
 }
 "#;
 
-        scrape(source.into()).unwrap().last();
+        ServiceUsage::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -337,7 +343,7 @@ export class Component {
 "#;
 
         let (class, source_map) = testing_utils::get_first_exported_class(source);
-        let (methods) = parsing_utils::get_class_methods(class);
+        let methods = parsing_utils::get_class_methods(class);
 
         let service_usages: Vec<_> = methods
             .flat_map(|method| {
@@ -386,7 +392,7 @@ export class Component {
 }
 "#;
 
-        let usages = scrape(source.into()).unwrap();
+        let usages = ServiceUsage::scrape(source.into()).unwrap();
 
         assert_eq!(usages.count(), 3);
     }
@@ -396,7 +402,7 @@ export class Component {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal-impact.component.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let mut usages = scrape(source).unwrap();
+        let mut usages = ServiceUsage::scrape(source).unwrap();
 
         assert_eq!(usages.count(), 23);
     }

@@ -18,31 +18,34 @@ enum FileSpecError {
     MissingClassExport,
 }
 
-pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceMethod>> {
-    let source_map = SourceMap::default();
-    let source_file = source_map.new_source_file(FileName::Anon, source);
-    let mut parser = parsing_utils::default_parser(&source_file);
+impl ServiceMethod {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceMethod>> {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source);
+        let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::get_module(&mut parser, &source_map)?;
-    let exports = parsing_utils::get_esmodule_exports(module);
+        let module = parsing_utils::get_module(&mut parser, &source_map)?;
+        let exports = parsing_utils::get_esmodule_exports(module);
 
-    let class = parsing_utils::get_first_exported_class(exports)
-        .ok_or(FileSpecError::MissingClassExport)?;
+        let class = parsing_utils::get_first_exported_class(exports)
+            .ok_or(FileSpecError::MissingClassExport)?;
 
-    let methods = parsing_utils::get_class_methods(class).filter_map(move |method| {
-        let (name, signature) = parsing_utils::gen_method_name_and_signature(&method, &source_map)?;
-        let used_constant_name = get_used_constant_name(&method, &source_map)?;
-        let location = parsing_utils::line_loc_from_span(method.span, &source_map);
+        let methods = parsing_utils::get_class_methods(class).filter_map(move |method| {
+            let (name, signature) =
+                parsing_utils::gen_method_name_and_signature(&method, &source_map)?;
+            let used_constant_name = get_used_constant_name(&method, &source_map)?;
+            let location = parsing_utils::line_loc_from_span(method.span, &source_map);
 
-        Some(ServiceMethod {
-            name,
-            signature,
-            used_constant_name,
-            location,
-        })
-    });
+            Some(ServiceMethod {
+                name,
+                signature,
+                used_constant_name,
+                location,
+            })
+        });
 
-    Ok(methods)
+        Ok(methods)
+    }
 }
 
 fn get_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Option<String> {
@@ -74,7 +77,7 @@ mod tests {
 class Service {}
 "#;
 
-        scrape(source.into()).unwrap().last();
+        ServiceMethod::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -129,7 +132,7 @@ export class Service {
 }
 "#;
 
-        let service_methods: Vec<_> = scrape(source.into()).unwrap().collect();
+        let service_methods: Vec<_> = ServiceMethod::scrape(source.into()).unwrap().collect();
 
         assert_eq!(service_methods.len(), 2);
 
@@ -159,7 +162,7 @@ export class Service {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal.service.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let service_methods = scrape(source).unwrap();
+        let service_methods = ServiceMethod::scrape(source).unwrap();
 
         assert_eq!(service_methods.count(), 23);
     }
