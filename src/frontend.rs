@@ -11,52 +11,115 @@ use std::{
 use anyhow::Context;
 use walkdir::WalkDir;
 
+use self::{component::ServiceUsage, constants::Constant, service::ServiceMethod};
+
 #[derive(PartialEq, Debug)]
 pub struct FrontendDir {
-    pub constants_file: PathBuf,
-    pub service_file: PathBuf,
-    pub component_file: PathBuf,
+    pub constants_path: PathBuf,
+    pub service_path: PathBuf,
+    pub component_path: PathBuf,
 }
 
 #[derive(Debug)]
-pub struct ConstantUsage {
-    pub constant_info: ConstantInfo,
-    pub service_info: Option<ServiceInfo>,
-    pub component_info: Option<ComponentInfo>,
+pub struct FrontendQueryResult {
+    pub constant: ConstantDefinition,
+    pub service: Option<ConstantServiceUsage>,
+    pub component: Option<ConstantComponentUsage>,
 }
 
 #[derive(Debug)]
-pub struct ConstantInfo {
+pub struct ConstantDefinition {
     pub api_url: String,
     pub name: String,
-    pub file_path: PathBuf,
+    pub path: PathBuf,
 }
 
 #[derive(Debug)]
-pub struct ServiceInfo {
+pub struct ConstantServiceUsage {
     pub method_signature: String,
     pub file_path: PathBuf,
 }
 
 #[derive(Debug)]
-pub struct ComponentInfo {
+pub struct ConstantComponentUsage {
     pub method_signature: String,
     pub file_path: PathBuf,
     pub usage_line_nr: usize,
 }
 
-pub fn query_constant(
+impl FrontendQueryResult {
+    pub fn search_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<Option<Self>> {
+        let constants = parse_file_with(&dir.constants_path, Constant::scrape)?;
+        let service_methods = parse_file_with(&dir.service_path, ServiceMethod::scrape)?;
+        let service_usages = parse_file_with(&dir.component_path, ServiceUsage::scrape)?;
+
+        let mut api_url_to_constant: HashMap<_, _> = constants
+            .map(|constant| (constant.api_url.clone(), constant))
+            .collect();
+
+        // NOTE: If we want to implement fuzzy finding or substring equality for a given route query,
+        // we would have to change this part.
+        //
+        let constant = match api_url_to_constant.remove(api_url_query) {
+            Some(constant) => constant,
+            None => return Ok(None),
+        };
+
+        let mut found_service_usage = None;
+        let mut found_component_usage = None;
+
+        let mut constant_name_to_service_method: HashMap<_, _> = service_methods
+            .map(|method| (method.used_constant_name.clone(), method))
+            .collect();
+
+        if let Some(service_method) = constant_name_to_service_method.remove(&constant.name) {
+            let mut method_name_to_usage: HashMap<_, _> = service_usages
+                .map(|usage| (usage.used_service.clone(), usage))
+                .collect();
+
+            if let Some(service_usage) = method_name_to_usage.remove(&service_method.name) {
+                found_component_usage = Some(ConstantComponentUsage {
+                    method_signature: service_usage.component_method_signature,
+                    file_path: dir.component_path,
+                    usage_line_nr: service_usage.location.line,
+                });
+            }
+
+            found_service_usage = Some(ConstantServiceUsage {
+                method_signature: service_method.signature,
+                file_path: dir.service_path,
+            });
+        }
+
+        let query_result = FrontendQueryResult {
+            constant: ConstantDefinition {
+                api_url: constant.api_url,
+                name: constant.name,
+                path: dir.constants_path,
+            },
+            service: found_service_usage,
+            component: found_component_usage,
+        };
+
+        Ok(Some(query_result))
+    }
+}
+
+pub fn search_constant(
     dir: FrontendDir,
     api_url_query: &str,
-) -> anyhow::Result<Option<ConstantUsage>> {
-    let constants = parse_file_with(&dir.constants_file, constants::from_source)?;
-    let service_methods = parse_file_with(&dir.service_file, service::from_source)?;
-    let service_usages = parse_file_with(&dir.component_file, component::from_source)?;
+) -> anyhow::Result<Option<FrontendQueryResult>> {
+    let constants = parse_file_with(&dir.constants_path, Constant::scrape)?;
+    let service_methods = parse_file_with(&dir.service_path, ServiceMethod::scrape)?;
+    let service_usages = parse_file_with(&dir.component_path, ServiceUsage::scrape)?;
 
     let mut api_url_to_constant: HashMap<_, _> = constants
         .map(|constant| (constant.api_url.clone(), constant))
         .collect();
 
+    // NOTE: If we want to implement fuzzy finding or substring equality for a given route query,
+    // we would have to change this part.
+    //
     let constant = match api_url_to_constant.remove(api_url_query) {
         Some(constant) => constant,
         None => return Ok(None),
@@ -75,27 +138,27 @@ pub fn query_constant(
             .collect();
 
         if let Some(service_usage) = method_name_to_usage.remove(&service_method.name) {
-            component_info = Some(ComponentInfo {
+            component_info = Some(ConstantComponentUsage {
                 method_signature: service_usage.component_method_signature,
-                file_path: dir.component_file,
+                file_path: dir.component_path,
                 usage_line_nr: service_usage.location.line,
             });
         }
 
-        service_info = Some(ServiceInfo {
+        service_info = Some(ConstantServiceUsage {
             method_signature: service_method.signature,
-            file_path: dir.service_file,
+            file_path: dir.service_path,
         });
     }
 
-    let constant_usage = ConstantUsage {
-        constant_info: ConstantInfo {
+    let constant_usage = FrontendQueryResult {
+        constant: ConstantDefinition {
             api_url: constant.api_url,
             name: constant.name,
-            file_path: dir.constants_file,
+            path: dir.constants_path,
         },
-        service_info,
-        component_info,
+        service: service_info,
+        component: component_info,
     };
 
     Ok(Some(constant_usage))
@@ -115,9 +178,9 @@ impl TryFrom<WalkDir> for FrontendDir {
             .collect();
 
         Ok(Self {
-            constants_file: find_file_with_suffix(files.iter(), "constants.ts")?,
-            service_file: find_file_with_suffix(files.iter(), "service.ts")?,
-            component_file: find_file_with_suffix(files.iter(), "component.ts")?,
+            constants_path: find_file_with_suffix(files.iter(), "constants.ts")?,
+            service_path: find_file_with_suffix(files.iter(), "service.ts")?,
+            component_path: find_file_with_suffix(files.iter(), "component.ts")?,
         })
     }
 }
@@ -137,5 +200,5 @@ where
     P: Fn(String) -> anyhow::Result<T>,
 {
     let source = fs::read_to_string(path)?;
-    parser_fn(source).with_context(|| format!("Failed to parse {:?}", path))
+    parser_fn(source).with_context(|| format!("Failed parsing {:?}", path))
 }

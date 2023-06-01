@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use swc_common::{FileName, SourceMap};
 use swc_ecma_ast::Lit;
 
@@ -18,51 +16,44 @@ enum FileSpecError {
     MissingApiUrlsExport,
 }
 
-pub fn from_source(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> {
-    let source_map = SourceMap::default();
-    let source_file = source_map.new_source_file(FileName::Anon, source);
-    let mut parser = parsing_utils::default_parser(&source_file);
+impl Constant {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> {
+        let source_map = SourceMap::default();
+        let source_file = source_map.new_source_file(FileName::Anon, source);
+        let mut parser = parsing_utils::default_parser(&source_file);
 
-    let module = parsing_utils::get_module(&mut parser, &source_map)?;
-    let exports = parsing_utils::get_module_exports(module);
+        let module = parsing_utils::get_module(&mut parser, &source_map)?;
+        let exports = parsing_utils::get_esmodule_exports(module);
 
-    let mut exported_variables = exports.filter_map(|export_decl| export_decl.decl.var());
+        let mut exported_variables = exports.filter_map(|export_decl| export_decl.decl.var());
 
-    let api_urls = exported_variables
-        .find_map(|var_decl| {
-            // We only care about the first variable declaration in a variable's pattern because
-            // right now we only support single identifiers. We need ownership.
-            let mut decls = VecDeque::from(var_decl.decls);
-            let var_declarator = decls.pop_front()?;
+        let api_urls = exported_variables
+            .find_map(|var_decl| {
+                parsing_utils::var_with_pattern_value(*var_decl, "apiUrls")?.object()
+            })
+            .ok_or(FileSpecError::MissingApiUrlsExport)?;
 
-            if var_declarator.name.as_ident()?.sym == *"apiUrls" {
-                var_declarator.init?.object()
-            } else {
-                None
-            }
-        })
-        .ok_or(FileSpecError::MissingApiUrlsExport)?;
+        let constants = api_urls.props.into_iter().filter_map(move |prop| {
+            let key_value_pair = prop.prop()?.key_value()?;
+            let ident = key_value_pair.key.ident()?;
 
-    let constants = api_urls.props.into_iter().filter_map(move |prop| {
-        let key_value_pair = prop.prop()?.key_value()?;
-        let ident = key_value_pair.key.ident()?;
+            let name = ident.sym.to_string();
+            let location = parsing_utils::line_loc_from_span(ident.span, &source_map);
 
-        let name = ident.sym.to_string();
-        let location = parsing_utils::line_loc_from_span(ident.span, &source_map);
+            let api_url = match key_value_pair.value.lit()? {
+                Lit::Str(str_literal) => str_literal.value.to_string(),
+                _ => return None,
+            };
 
-        let api_url = match key_value_pair.value.lit()? {
-            Lit::Str(str_literal) => str_literal.value.to_string(),
-            _ => return None,
-        };
+            Some(Constant {
+                name,
+                api_url,
+                location,
+            })
+        });
 
-        Some(Constant {
-            name,
-            api_url,
-            location,
-        })
-    });
-
-    Ok(constants)
+        Ok(constants)
+    }
 }
 
 #[cfg(test)]
@@ -78,11 +69,11 @@ mod tests {
 export const apiUrls = 10;
 "#;
 
-        from_source(source.into()).unwrap().last();
+        Constant::scrape(source.into()).unwrap().last();
     }
 
     #[test]
-    fn getting_constants_from_source() {
+    fn scraping_constants_from_source() {
         let source = r#"
 export const apiUrls = {
   GET_RESULTS: '/api/causal/results',
@@ -91,7 +82,7 @@ export const apiUrls = {
 };
 "#;
 
-        let constants: Vec<_> = from_source(source.into()).unwrap().collect();
+        let constants: Vec<_> = Constant::scrape(source.into()).unwrap().collect();
 
         assert_eq!(constants.len(), 3);
 
@@ -135,18 +126,18 @@ export const apiUrls = {
 };
 "#;
 
-        let constants: Vec<_> = from_source(source.into()).unwrap().collect();
+        let constants = Constant::scrape(source.into()).unwrap();
 
-        assert_eq!(constants.len(), 3);
+        assert_eq!(constants.count(), 3);
     }
 
     #[test]
-    fn getting_causal_impact_constants_from_real_data() {
+    fn scraping_constants_from_real_data() {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/constants.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let constants: Vec<_> = from_source(source).unwrap().collect();
+        let constants = Constant::scrape(source).unwrap();
 
-        assert_eq!(constants.len(), 24);
+        assert_eq!(constants.count(), 24);
     }
 }
