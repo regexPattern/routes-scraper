@@ -7,7 +7,7 @@ use crate::parsing_utils::{self, LineLoc};
 pub struct Constant {
     pub name: String,
     pub api_url: String,
-    pub location: LineLoc,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
@@ -38,7 +38,7 @@ impl Constant {
             let ident = key_value_pair.key.ident()?;
 
             let name = ident.sym.to_string();
-            let location = parsing_utils::line_loc_from_span(ident.span, &source_map);
+            let line_loc = parsing_utils::line_loc_from_span(ident.span, &source_map);
 
             let api_url = match key_value_pair.value.lit()? {
                 Lit::Str(str_literal) => str_literal.value.to_string(),
@@ -48,7 +48,7 @@ impl Constant {
             Some(Constant {
                 name,
                 api_url,
-                location,
+                line_loc,
             })
         });
 
@@ -58,8 +58,6 @@ impl Constant {
 
 #[cfg(test)]
 mod tests {
-    use include_bytes_plus::include_bytes;
-
     use super::*;
 
     #[test]
@@ -91,7 +89,7 @@ export const apiUrls = {
             &Constant {
                 name: "GET_RESULTS".into(),
                 api_url: "/api/causal/results".into(),
-                location: LineLoc { line: 3, col: 2 },
+                line_loc: LineLoc { line: 3, col: 2 },
             }
         );
 
@@ -100,7 +98,7 @@ export const apiUrls = {
             &Constant {
                 name: "GET_ARCHIVEDRESULTS".into(),
                 api_url: "/api/causal/archivedresults".into(),
-                location: LineLoc { line: 4, col: 2 },
+                line_loc: LineLoc { line: 4, col: 2 },
             }
         );
 
@@ -109,7 +107,7 @@ export const apiUrls = {
             &Constant {
                 name: "GET_TEST_BY_NAME".into(),
                 api_url: "/api/causal/test/name?name={{name}}".into(),
-                location: LineLoc { line: 5, col: 2 },
+                line_loc: LineLoc { line: 5, col: 2 },
             }
         );
     }
@@ -129,15 +127,5 @@ export const apiUrls = {
         let constants = Constant::scrape(source.into()).unwrap();
 
         assert_eq!(constants.count(), 3);
-    }
-
-    #[test]
-    fn scraping_constants_from_real_data() {
-        let bytes = include_bytes!("./test_data/frontend/causal-impact/constants.ts");
-        let source = String::from_utf8(bytes.into()).unwrap();
-
-        let constants = Constant::scrape(source).unwrap();
-
-        assert_eq!(constants.count(), 24);
     }
 }

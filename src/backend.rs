@@ -10,80 +10,53 @@ use anyhow::Context;
 use app::RouteWithHandler;
 use regex::Regex;
 
-use crate::parsing_utils::LineLoc;
-
 use self::route_handlers::RouteHandlerDefinition;
 
 #[derive(Debug)]
-pub struct BackendQueryResult {
-    pub file_path: PathBuf,
-    pub definition_line_nr: usize,
+pub struct RouteDefinition {
+    pub full_api_url: String,
+    pub path: PathBuf,
+    pub line_nr: usize,
 }
 
-pub fn search_route_definition(
-    backend_root_dir: &Path,
-    api_url_query: &str,
-) -> anyhow::Result<Option<BackendQueryResult>> {
-    let mut handlers = scrape_backend_routes(backend_root_dir)?;
+impl RouteDefinition {
+    pub fn scrape_backend(backend_root_dir: &Path) -> anyhow::Result<impl Iterator<Item = Self>> {
+        let app_js_path = backend_root_dir.join("app.js");
+        let app_js_source = fs::read_to_string(&app_js_path)?;
 
-    let handler =
-        if let Some(handler) = handlers.find(|handler| handler.full_api_url == api_url_query) {
-            handler
-        } else {
-            return Ok(None);
-        };
+        let routes = RouteWithHandler::scrape(app_js_source)?;
 
-    Ok(Some(BackendQueryResult {
-        file_path: handler.path,
-        definition_line_nr: handler.line_loc.line,
-    }))
-}
+        let mut handlers = vec![];
 
-#[derive(Debug)]
-struct HandlerDefinition {
-    full_api_url: String,
-    path: PathBuf,
-    line_loc: LineLoc,
-}
+        for route in routes {
+            let handler_path_from_app_js = match route.handler_source_path.strip_prefix(".") {
+                Ok(path) => path,
+                _ => continue,
+            };
 
-fn scrape_backend_routes(
-    backend_root_dir: &Path,
-) -> anyhow::Result<impl Iterator<Item = HandlerDefinition>> {
-    let app_js_path = backend_root_dir.join("app.js");
-    let app_js_source = fs::read_to_string(&app_js_path)?;
+            let handler_path_from_cwd = backend_root_dir
+                .join(handler_path_from_app_js)
+                .with_extension("js");
 
-    let routes = RouteWithHandler::scrape(app_js_source)?;
+            let handlers_src = fs::read_to_string(&handler_path_from_cwd)
+                .with_context(|| format!("Failed reading {:?}", handler_path_from_cwd))?;
 
-    let mut handlers = vec![];
+            handlers.extend(
+                RouteHandlerDefinition::scrape(handlers_src)?.map(|handler| {
+                    let api_url =
+                        format!("{}/{}", route.base_url, handler.url_suffix).replace("//", "/");
 
-    for route in routes {
-        let handler_path_from_app_js = match route.handler_source_path.strip_prefix(".") {
-            Ok(path) => path,
-            _ => continue,
-        };
+                    Self {
+                        full_api_url: adapt_backend_api_url_to_frontend_format(&api_url),
+                        path: handler_path_from_cwd.clone(),
+                        line_nr: handler.line_loc.line,
+                    }
+                }),
+            );
+        }
 
-        let handler_path_from_cwd = backend_root_dir
-            .join(handler_path_from_app_js)
-            .with_extension("js");
-
-        let handlers_src = fs::read_to_string(&handler_path_from_cwd)
-            .with_context(|| format!("Failed reading {:?}", handler_path_from_cwd))?;
-
-        handlers.extend(
-            RouteHandlerDefinition::scrape(handlers_src)?.map(|handler| {
-                let api_url =
-                    format!("{}/{}", route.base_url, handler.url_suffix).replace("//", "/");
-
-                HandlerDefinition {
-                    full_api_url: adapt_backend_api_url_to_frontend_format(&api_url),
-                    path: handler_path_from_cwd.clone(),
-                    line_loc: handler.line_loc,
-                }
-            }),
-        );
+        Ok(handlers.into_iter())
     }
-
-    Ok(handlers.into_iter())
 }
 
 fn adapt_backend_api_url_to_frontend_format(api_url: &str) -> String {

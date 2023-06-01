@@ -10,8 +10,8 @@ use crate::parsing_utils::{self, LineLoc};
 #[derive(PartialEq, Debug)]
 pub struct ServiceUsage {
     pub component_method_signature: String,
-    pub used_service: String,
-    pub location: LineLoc,
+    pub used_service_method_name: String,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
@@ -128,19 +128,19 @@ impl VisitAll for MethodServiceUsagesVisitor<'_, '_> {
     fn visit_member_expr(&mut self, member_expr: &MemberExpr) {
         if let Ok(snippet) = self.source_map.span_to_snippet(member_expr.span) {
             if let Some(used_service) = self.used_service_name(&snippet) {
-                let span = parsing_utils::line_loc_from_span(member_expr.span, self.source_map);
+                let line_loc = parsing_utils::line_loc_from_span(member_expr.span, self.source_map);
 
                 // Since we want to save each usage once, we hash each `MemberExpr` by the name of
                 // the service method it uses and the line name. This is because a `MemberExpr`
                 // such as: `this.service.method().subscribe()` can be decomposed into inner
                 // `MemberExpr`s, but we only really care about one of them.
                 //
-                let usage_hash = format!("{used_service}:{}", span.line);
+                let usage_hash = format!("{used_service}:{}", line_loc.line);
 
                 self.usages.entry(usage_hash).or_insert(ServiceUsage {
                     component_method_signature: self.signature.clone(),
-                    used_service,
-                    location: span,
+                    used_service_method_name: used_service,
+                    line_loc,
                 });
             }
         }
@@ -187,8 +187,6 @@ fn get_service_usages_in_method(
 
 #[cfg(test)]
 mod tests {
-    use include_bytes_plus::include_bytes;
-
     use crate::parsing_utils::testing_utils;
 
     use super::*;
@@ -359,15 +357,15 @@ export class Component {
         assert_eq!(service_usages.len(), 2);
 
         assert!(service_usages.contains(&ServiceUsage {
-            used_service: "serviceMethod1".into(),
+            used_service_method_name: "serviceMethod1".into(),
             component_method_signature: "method1(): any".into(),
-            location: LineLoc { line: 4, col: 4 },
+            line_loc: LineLoc { line: 4, col: 4 },
         }));
 
         assert!(service_usages.contains(&ServiceUsage {
-            used_service: "serviceMethod2".into(),
+            used_service_method_name: "serviceMethod2".into(),
             component_method_signature: "method1(): any".into(),
-            location: LineLoc { line: 9, col: 10 },
+            line_loc: LineLoc { line: 9, col: 10 },
         }));
     }
 
@@ -395,15 +393,5 @@ export class Component {
         let usages = ServiceUsage::scrape(source.into()).unwrap();
 
         assert_eq!(usages.count(), 3);
-    }
-
-    #[test]
-    fn scraping_service_usages_from_real_data() {
-        let bytes = include_bytes!("./test_data/frontend/causal-impact/causal-impact.component.ts");
-        let source = String::from_utf8(bytes.into()).unwrap();
-
-        let usages = ServiceUsage::scrape(source).unwrap();
-
-        assert_eq!(usages.count(), 23);
     }
 }

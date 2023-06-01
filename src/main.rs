@@ -20,7 +20,7 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    routes_scraper::search_api_url(cli.frontend, cli.backend, &cli.api_url_query)?;
+    let _api_urls: Vec<_> = routes_scraper::search_api_url(cli.frontend, cli.backend)?.collect();
 
     Ok(())
 }

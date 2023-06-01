@@ -9,7 +9,7 @@ pub struct ServiceMethod {
     pub name: String,
     pub signature: String,
     pub used_constant_name: String,
-    pub location: LineLoc,
+    pub line_loc: LineLoc,
 }
 
 #[derive(thiserror::Error, PartialEq, Debug)]
@@ -34,13 +34,13 @@ impl ServiceMethod {
             let (name, signature) =
                 parsing_utils::gen_method_name_and_signature(&method, &source_map)?;
             let used_constant_name = get_used_constant_name(&method, &source_map)?;
-            let location = parsing_utils::line_loc_from_span(method.span, &source_map);
+            let line_loc = parsing_utils::line_loc_from_span(method.span, &source_map);
 
             Some(ServiceMethod {
                 name,
                 signature,
                 used_constant_name,
-                location,
+                line_loc,
             })
         });
 
@@ -63,8 +63,6 @@ fn get_used_constant_name(method: &ClassMethod, source_map: &SourceMap) -> Optio
 
 #[cfg(test)]
 mod tests {
-    use include_bytes_plus::include_bytes;
-
     use crate::parsing_utils::testing_utils;
 
     use super::*;
@@ -142,7 +140,7 @@ export class Service {
                 name: "getMetaHierarchies".into(),
                 signature: "getMetaHierarchies(): any".into(),
                 used_constant_name: "GET_META_HIERARCHIES".into(),
-                location: LineLoc { line: 3, col: 2 }
+                line_loc: LineLoc { line: 3, col: 2 }
             },
         );
 
@@ -152,18 +150,27 @@ export class Service {
                 name: "getMetaKpis".into(),
                 signature: "getMetaKpis(): any".into(),
                 used_constant_name: "GET_META_KPIS".into(),
-                location: LineLoc { line: 9, col: 2 }
+                line_loc: LineLoc { line: 9, col: 2 }
             }
         );
     }
 
     #[test]
-    fn scraping_service_methods_from_real_data() {
-        let bytes = include_bytes!("./test_data/frontend/causal-impact/causal.service.ts");
-        let source = String::from_utf8(bytes.into()).unwrap();
+    fn scraping_two_services_that_use_the_same_constant() {
+        let source = r#"
+export class Service {
+  method1(): any {
+    const api = globals.apiUrls.GET_META_HIERARCHIES;
+  }
 
-        let service_methods = ServiceMethod::scrape(source).unwrap();
+  method2(): any {
+    const api = globals.apiUrls.GET_META_HIERARCHIES;
+  }
+}
+"#;
 
-        assert_eq!(service_methods.count(), 23);
+        let service_methods = ServiceMethod::scrape(source.into()).unwrap();
+
+        assert_eq!(service_methods.count(), 2);
     }
 }

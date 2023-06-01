@@ -21,10 +21,10 @@ pub struct FrontendDir {
 }
 
 #[derive(Debug)]
-pub struct FrontendQueryResult {
-    pub constant: ConstantDefinition,
-    pub service: Option<ConstantServiceUsage>,
-    pub component: Option<ConstantComponentUsage>,
+pub struct ConstantUsage {
+    pub definition: ConstantDefinition,
+    pub service_usage: Option<ConstantServiceUsage>,
+    pub component_usage: Option<ConstantComponentUsage>,
 }
 
 #[derive(Debug)]
@@ -47,121 +47,110 @@ pub struct ConstantComponentUsage {
     pub usage_line_nr: usize,
 }
 
-impl FrontendQueryResult {
-    pub fn search_constant(dir: FrontendDir, api_url_query: &str) -> anyhow::Result<Option<Self>> {
+impl ConstantUsage {
+    pub fn scrape_dir(dir: FrontendDir) -> anyhow::Result<impl Iterator<Item = Self>> {
         let constants = parse_file_with(&dir.constants_path, Constant::scrape)?;
         let service_methods = parse_file_with(&dir.service_path, ServiceMethod::scrape)?;
         let service_usages = parse_file_with(&dir.component_path, ServiceUsage::scrape)?;
 
-        let mut api_url_to_constant: HashMap<_, _> = constants
-            .map(|constant| (constant.api_url.clone(), constant))
-            .collect();
+        let mut constant_name_to_service_methods: HashMap<_, Vec<ServiceMethod>> = HashMap::new();
 
-        // NOTE: If we want to implement fuzzy finding or substring equality for a given route query,
-        // we would have to change this part.
-        //
-        let constant = match api_url_to_constant.remove(api_url_query) {
-            Some(constant) => constant,
-            None => return Ok(None),
-        };
+        for service_method in service_methods {
+            let service_methods = constant_name_to_service_methods
+                .entry(service_method.used_constant_name.clone())
+                .or_default();
 
-        let mut found_service_usage = None;
-        let mut found_component_usage = None;
-
-        let mut constant_name_to_service_method: HashMap<_, _> = service_methods
-            .map(|method| (method.used_constant_name.clone(), method))
-            .collect();
-
-        if let Some(service_method) = constant_name_to_service_method.remove(&constant.name) {
-            let mut method_name_to_usage: HashMap<_, _> = service_usages
-                .map(|usage| (usage.used_service.clone(), usage))
-                .collect();
-
-            if let Some(service_usage) = method_name_to_usage.remove(&service_method.name) {
-                found_component_usage = Some(ConstantComponentUsage {
-                    method_signature: service_usage.component_method_signature,
-                    file_path: dir.component_path,
-                    usage_line_nr: service_usage.location.line,
-                });
-            }
-
-            found_service_usage = Some(ConstantServiceUsage {
-                method_signature: service_method.signature,
-                file_path: dir.service_path,
-            });
+            service_methods.push(service_method);
         }
 
-        let query_result = FrontendQueryResult {
-            constant: ConstantDefinition {
-                api_url: constant.api_url,
-                name: constant.name,
-                path: dir.constants_path,
-            },
-            service: found_service_usage,
-            component: found_component_usage,
-        };
+        let mut service_method_name_to_usages: HashMap<_, Vec<ServiceUsage>> = HashMap::new();
 
-        Ok(Some(query_result))
+        for usage in service_usages {
+            let service_usages = service_method_name_to_usages
+                .entry(usage.used_service_method_name.clone())
+                .or_default();
+
+            service_usages.push(usage);
+        }
+
+        let constant_usages = constants.flat_map(move |constant| {
+            bundle_constant_usages(
+                constant,
+                &mut constant_name_to_service_methods,
+                &mut service_method_name_to_usages,
+                &dir,
+            )
+        });
+
+        Ok(constant_usages.into_iter())
     }
 }
 
-pub fn search_constant(
-    dir: FrontendDir,
-    api_url_query: &str,
-) -> anyhow::Result<Option<FrontendQueryResult>> {
-    let constants = parse_file_with(&dir.constants_path, Constant::scrape)?;
-    let service_methods = parse_file_with(&dir.service_path, ServiceMethod::scrape)?;
-    let service_usages = parse_file_with(&dir.component_path, ServiceUsage::scrape)?;
+fn bundle_constant_usages(
+    constant: Constant,
+    constant_name_to_service_methods: &mut HashMap<String, Vec<ServiceMethod>>,
+    service_method_name_to_usages: &mut HashMap<String, Vec<ServiceUsage>>,
+    dir: &FrontendDir,
+) -> impl Iterator<Item = ConstantUsage> {
+    let service_methods =
+        if let Some(methods) = constant_name_to_service_methods.remove(&constant.name) {
+            methods
+        } else {
+            return vec![ConstantUsage {
+                definition: ConstantDefinition {
+                    api_url: constant.api_url,
+                    name: constant.name,
+                    path: dir.constants_path.clone(),
+                },
+                service_usage: None,
+                component_usage: None,
+            }]
+            .into_iter();
+        };
 
-    let mut api_url_to_constant: HashMap<_, _> = constants
-        .map(|constant| (constant.api_url.clone(), constant))
-        .collect();
+    let mut constant_usages = vec![];
 
-    // NOTE: If we want to implement fuzzy finding or substring equality for a given route query,
-    // we would have to change this part.
-    //
-    let constant = match api_url_to_constant.remove(api_url_query) {
-        Some(constant) => constant,
-        None => return Ok(None),
-    };
+    for method in service_methods {
+        let service_usages =
+            if let Some(usages) = service_method_name_to_usages.remove(&method.name) {
+                usages
+            } else {
+                constant_usages.push(ConstantUsage {
+                    definition: ConstantDefinition {
+                        api_url: constant.api_url.clone(),
+                        name: constant.name.clone(),
+                        path: dir.constants_path.clone(),
+                    },
+                    service_usage: Some(ConstantServiceUsage {
+                        method_signature: method.signature.clone(),
+                        file_path: dir.service_path.clone(),
+                    }),
+                    component_usage: None,
+                });
+                break;
+            };
 
-    let mut service_info = None;
-    let mut component_info = None;
-
-    let mut constant_name_to_service_method: HashMap<_, _> = service_methods
-        .map(|method| (method.used_constant_name.clone(), method))
-        .collect();
-
-    if let Some(service_method) = constant_name_to_service_method.remove(&constant.name) {
-        let mut method_name_to_usage: HashMap<_, _> = service_usages
-            .map(|usage| (usage.used_service.clone(), usage))
-            .collect();
-
-        if let Some(service_usage) = method_name_to_usage.remove(&service_method.name) {
-            component_info = Some(ConstantComponentUsage {
-                method_signature: service_usage.component_method_signature,
-                file_path: dir.component_path,
-                usage_line_nr: service_usage.location.line,
+        for usage in service_usages {
+            constant_usages.push(ConstantUsage {
+                definition: ConstantDefinition {
+                    api_url: constant.api_url.clone(),
+                    name: constant.name.clone(),
+                    path: dir.constants_path.clone(),
+                },
+                service_usage: Some(ConstantServiceUsage {
+                    method_signature: method.signature.clone(),
+                    file_path: dir.service_path.clone(),
+                }),
+                component_usage: Some(ConstantComponentUsage {
+                    method_signature: usage.component_method_signature,
+                    file_path: dir.component_path.clone(),
+                    usage_line_nr: usage.line_loc.line,
+                }),
             });
         }
-
-        service_info = Some(ConstantServiceUsage {
-            method_signature: service_method.signature,
-            file_path: dir.service_path,
-        });
     }
 
-    let constant_usage = FrontendQueryResult {
-        constant: ConstantDefinition {
-            api_url: constant.api_url,
-            name: constant.name,
-            path: dir.constants_path,
-        },
-        service: service_info,
-        component: component_info,
-    };
-
-    Ok(Some(constant_usage))
+    constant_usages.into_iter()
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -201,4 +190,22 @@ where
 {
     let source = fs::read_to_string(path)?;
     parser_fn(source).with_context(|| format!("Failed parsing {:?}", path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scraping_constants_from_real_data() {
+        let dir = FrontendDir {
+            constants_path: "./test_data/frontend/causal-impact/constants.ts".into(),
+            service_path: "./test_data/frontend/causal-impact/causal.service.ts".into(),
+            component_path: "./test_data/frontend/causal-impact/causal-impact.component.ts".into(),
+        };
+
+        let constants = ConstantUsage::scrape_dir(dir).unwrap();
+
+        assert_eq!(constants.count(), 24);
+    }
 }
