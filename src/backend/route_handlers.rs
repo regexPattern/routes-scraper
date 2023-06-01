@@ -55,10 +55,10 @@ fn get_route_handler(
     call_expr: &CallExpr,
     source_map: &SourceMap,
 ) -> Option<RouteHandlerDefinition> {
-    let line_loc = parsing_utils::line_loc_from_span(call_expr.span, &source_map);
+    let line_loc = parsing_utils::line_loc_from_span(call_expr.span, source_map);
     let args = &call_expr.args;
 
-    let route = match args.first().map(|expr| expr.expr.as_lit()).flatten()? {
+    let route = match args.first().and_then(|expr| expr.expr.as_lit())? {
         Lit::Str(str_literal) => str_literal.value.to_string(),
         _ => return None,
     };

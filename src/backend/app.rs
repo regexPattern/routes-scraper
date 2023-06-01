@@ -71,12 +71,12 @@ fn get_route_definition(call_expr: &CallExpr, source_map: &SourceMap) -> Option<
 
     let args = &call_expr.args;
 
-    let route = match args.first().map(|expr| expr.expr.as_lit()).flatten()? {
+    let route = match args.first().and_then(|expr| expr.expr.as_lit())? {
         Lit::Str(str_literal) => str_literal.value.to_string(),
         _ => return None,
     };
 
-    let callback = args.last().map(|expr| expr.expr.as_call()).flatten()?;
+    let callback = args.last().and_then(|expr| expr.expr.as_call())?;
     let handler_name = callback.callee.as_expr()?.as_ident()?.sym.to_string();
 
     Some(RouteDefinition {

@@ -132,6 +132,7 @@ pub fn gen_method_name_and_signature(
     Some((name, signature))
 }
 
+#[cfg(test)]
 pub mod testing_utils {
     use swc_common::{FileName, SourceMap};
     use swc_ecma_ast::{ClassDecl, ClassMethod, VarDecl};

@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Context;
 use app::RouteWithHandler;
-use regex::{Captures, Regex};
+use regex::Regex;
 
 use crate::parsing_utils::LineLoc;
 
@@ -63,7 +63,7 @@ fn scrape_backend_routes(
         };
 
         let handler_path_from_cwd = backend_root_dir
-            .join(&handler_path_from_app_js)
+            .join(handler_path_from_app_js)
             .with_extension("js");
 
         let handlers_src = fs::read_to_string(&handler_path_from_cwd)

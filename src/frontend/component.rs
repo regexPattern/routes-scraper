@@ -402,7 +402,7 @@ export class Component {
         let bytes = include_bytes!("./test_data/frontend/causal-impact/causal-impact.component.ts");
         let source = String::from_utf8(bytes.into()).unwrap();
 
-        let mut usages = ServiceUsage::scrape(source).unwrap();
+        let usages = ServiceUsage::scrape(source).unwrap();
 
         assert_eq!(usages.count(), 23);
     }
