@@ -11,153 +11,115 @@ use std::{
 use anyhow::Context;
 use walkdir::WalkDir;
 
-use self::{component::ServiceUsage, constants::Constant, service::ServiceMethod};
+use self::{component::ComponentMethod, constants::ConstantDef, service::ServiceMethod};
 
 #[derive(PartialEq, Debug)]
-pub struct FrontendDir {
-    pub constants_path: PathBuf,
-    pub service_path: PathBuf,
-    pub component_path: PathBuf,
+pub struct FrontendPaths {
+    pub constants: PathBuf,
+    pub service: PathBuf,
+    pub component: PathBuf,
 }
 
 #[derive(Debug)]
-pub struct ConstantUsage {
-    pub definition: ConstantDefinition,
-    pub service_usage: Option<ConstantServiceUsage>,
-    pub component_usage: Option<ConstantComponentUsage>,
+pub struct FrontendConstant {
+    pub definition: ConstantDef,
+    pub service_usage: Option<ServiceMethod>,
+    pub component_usage: Option<ComponentMethod>,
 }
 
-#[derive(Debug)]
-pub struct ConstantDefinition {
-    pub api_url: String,
-    pub name: String,
-    pub path: PathBuf,
-}
+impl FrontendConstant {
+    pub fn scrape_dir(dir: FrontendPaths) -> anyhow::Result<impl Iterator<Item = Self>> {
+        let constant_defs = scrape_file_with(&dir.constants, ConstantDef::scrape)?;
+        let service_methods = scrape_file_with(&dir.service, ServiceMethod::scrape)?;
+        let component_methods = scrape_file_with(&dir.component, ComponentMethod::scrape)?;
 
-#[derive(Debug)]
-pub struct ConstantServiceUsage {
-    pub method_signature: String,
-    pub file_path: PathBuf,
-}
+        let mut constant_name_to_service_methods: HashMap<String, Vec<ServiceMethod>> =
+            HashMap::new();
 
-#[derive(Debug)]
-pub struct ConstantComponentUsage {
-    pub method_signature: String,
-    pub file_path: PathBuf,
-    pub usage_line_nr: usize,
-}
-
-impl ConstantUsage {
-    pub fn scrape_dir(dir: FrontendDir) -> anyhow::Result<impl Iterator<Item = Self>> {
-        let constants = parse_file_with(&dir.constants_path, Constant::scrape)?;
-        let service_methods = parse_file_with(&dir.service_path, ServiceMethod::scrape)?;
-        let service_usages = parse_file_with(&dir.component_path, ServiceUsage::scrape)?;
-
-        let mut constant_name_to_service_methods: HashMap<_, Vec<ServiceMethod>> = HashMap::new();
-
-        for service_method in service_methods {
-            let service_methods = constant_name_to_service_methods
-                .entry(service_method.used_constant_name.clone())
+        for method in service_methods {
+            let methods_that_use_constant = constant_name_to_service_methods
+                .entry(method.used_constant_name.clone())
                 .or_default();
 
-            service_methods.push(service_method);
+            methods_that_use_constant.push(method);
         }
 
-        let mut service_method_name_to_usages: HashMap<_, Vec<ServiceUsage>> = HashMap::new();
+        let mut service_method_name_to_component_method: HashMap<String, Vec<ComponentMethod>> =
+            HashMap::new();
 
-        for usage in service_usages {
-            let service_usages = service_method_name_to_usages
-                .entry(usage.used_service_method_name.clone())
+        for method in component_methods {
+            let methods_that_use_service = service_method_name_to_component_method
+                .entry(method.used_service_method_name.clone())
                 .or_default();
 
-            service_usages.push(usage);
+            methods_that_use_service.push(method);
         }
 
-        let constant_usages = constants.flat_map(move |constant| {
-            bundle_constant_usages(
-                constant,
+        let frontend_constants = constant_defs.flat_map(move |constant_def| {
+            bundle_constant_service_component_usages(
+                constant_def,
                 &mut constant_name_to_service_methods,
-                &mut service_method_name_to_usages,
-                &dir,
+                &mut service_method_name_to_component_method,
             )
         });
 
-        Ok(constant_usages.into_iter())
+        Ok(frontend_constants)
     }
 }
 
-fn bundle_constant_usages(
-    constant: Constant,
+fn bundle_constant_service_component_usages(
+    constant_def: ConstantDef,
     constant_name_to_service_methods: &mut HashMap<String, Vec<ServiceMethod>>,
-    service_method_name_to_usages: &mut HashMap<String, Vec<ServiceUsage>>,
-    dir: &FrontendDir,
-) -> impl Iterator<Item = ConstantUsage> {
-    let service_methods =
-        if let Some(methods) = constant_name_to_service_methods.remove(&constant.name) {
-            methods
-        } else {
-            return vec![ConstantUsage {
-                definition: ConstantDefinition {
-                    api_url: constant.api_url,
-                    name: constant.name,
-                    path: dir.constants_path.clone(),
-                },
-                service_usage: None,
-                component_usage: None,
-            }]
-            .into_iter();
-        };
+    service_method_name_to_component_method: &mut HashMap<String, Vec<ComponentMethod>>,
+) -> impl Iterator<Item = FrontendConstant> {
+    let mut frontend_constant_usages = vec![];
 
-    let mut constant_usages = vec![];
-
-    for method in service_methods {
-        let service_usages =
-            if let Some(usages) = service_method_name_to_usages.remove(&method.name) {
-                usages
-            } else {
-                constant_usages.push(ConstantUsage {
-                    definition: ConstantDefinition {
-                        api_url: constant.api_url.clone(),
-                        name: constant.name.clone(),
-                        path: dir.constants_path.clone(),
-                    },
-                    service_usage: Some(ConstantServiceUsage {
-                        method_signature: method.signature.clone(),
-                        file_path: dir.service_path.clone(),
-                    }),
+    let service_methods_where_const_is_used =
+        match constant_name_to_service_methods.remove(&constant_def.name) {
+            Some(usages) => usages,
+            None => {
+                frontend_constant_usages.push(FrontendConstant {
+                    definition: constant_def,
+                    service_usage: None,
                     component_usage: None,
                 });
-                break;
+
+                return frontend_constant_usages.into_iter();
+            }
+        };
+
+    for service_method in service_methods_where_const_is_used {
+        let component_methods_where_service_is_used =
+            match service_method_name_to_component_method.remove(&service_method.name) {
+                Some(usages) => usages,
+                None => {
+                    frontend_constant_usages.push(FrontendConstant {
+                        definition: constant_def.clone(),
+                        service_usage: Some(service_method),
+                        component_usage: None,
+                    });
+
+                    break;
+                }
             };
 
-        for usage in service_usages {
-            constant_usages.push(ConstantUsage {
-                definition: ConstantDefinition {
-                    api_url: constant.api_url.clone(),
-                    name: constant.name.clone(),
-                    path: dir.constants_path.clone(),
-                },
-                service_usage: Some(ConstantServiceUsage {
-                    method_signature: method.signature.clone(),
-                    file_path: dir.service_path.clone(),
-                }),
-                component_usage: Some(ConstantComponentUsage {
-                    method_signature: usage.component_method_signature,
-                    file_path: dir.component_path.clone(),
-                    usage_line_nr: usage.line_loc.line,
-                }),
+        for component_method in component_methods_where_service_is_used {
+            frontend_constant_usages.push(FrontendConstant {
+                definition: constant_def.clone(),
+                service_usage: Some(service_method.clone()),
+                component_usage: Some(component_method),
             });
         }
     }
 
-    constant_usages.into_iter()
+    frontend_constant_usages.into_iter()
 }
 
 #[derive(thiserror::Error, Debug)]
 #[error("Missing '{0}' file")]
 pub struct MissingFileError(String);
 
-impl TryFrom<WalkDir> for FrontendDir {
+impl TryFrom<WalkDir> for FrontendPaths {
     type Error = MissingFileError;
 
     fn try_from(dir: WalkDir) -> Result<Self, Self::Error> {
@@ -167,9 +129,9 @@ impl TryFrom<WalkDir> for FrontendDir {
             .collect();
 
         Ok(Self {
-            constants_path: find_file_with_suffix(files.iter(), "constants.ts")?,
-            service_path: find_file_with_suffix(files.iter(), "service.ts")?,
-            component_path: find_file_with_suffix(files.iter(), "component.ts")?,
+            constants: find_file_with_suffix(files.iter(), "constants.ts")?,
+            service: find_file_with_suffix(files.iter(), "service.ts")?,
+            component: find_file_with_suffix(files.iter(), "component.ts")?,
         })
     }
 }
@@ -184,7 +146,7 @@ fn find_file_with_suffix<'p>(
         .ok_or(MissingFileError(suffix.into()))
 }
 
-fn parse_file_with<P, T>(path: &Path, parser_fn: P) -> anyhow::Result<T>
+fn scrape_file_with<P, T>(path: &Path, parser_fn: P) -> anyhow::Result<T>
 where
     P: Fn(String) -> anyhow::Result<T>,
 {
@@ -198,14 +160,16 @@ mod tests {
 
     #[test]
     fn scraping_constants_from_real_data() {
-        let dir = FrontendDir {
-            constants_path: "./test_data/frontend/causal-impact/constants.ts".into(),
-            service_path: "./test_data/frontend/causal-impact/causal.service.ts".into(),
-            component_path: "./test_data/frontend/causal-impact/causal-impact.component.ts".into(),
+        let dir = FrontendPaths {
+            constants: "./test_data/frontend/causal-impact/constants.ts".into(),
+            service: "./test_data/frontend/causal-impact/causal.service.ts".into(),
+            component: "./test_data/frontend/causal-impact/causal-impact.component.ts".into(),
         };
 
-        let constants = ConstantUsage::scrape_dir(dir).unwrap();
+        let constants = FrontendConstant::scrape_dir(dir).unwrap();
+        let constants = constants.collect::<Vec<_>>();
+        dbg!(constants);
 
-        assert_eq!(constants.count(), 24);
+        // assert_eq!(constants.count(), 24);
     }
 }

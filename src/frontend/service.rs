@@ -4,7 +4,7 @@ use swc_ecma_ast::ClassMethod;
 
 use crate::parsing_utils::{self, LineLoc};
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ServiceMethod {
     pub name: String,
     pub signature: String,

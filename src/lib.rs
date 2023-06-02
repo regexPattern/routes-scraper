@@ -8,14 +8,12 @@ use std::{
 };
 
 use backend::RouteDefinition;
-use frontend::FrontendDir;
+use frontend::{FrontendConstant, FrontendPaths};
 use walkdir::{IntoIter, WalkDir};
-
-use crate::frontend::ConstantUsage;
 
 #[derive(Debug)]
 pub struct ApiUrl {
-    pub frontend_usage: ConstantUsage,
+    pub frontend_usage: FrontendConstant,
     pub backend_route: Option<RouteDefinition>,
 }
 
@@ -23,9 +21,9 @@ pub fn search_api_url(
     frontend_root_dir: PathBuf,
     backend_root_dir: PathBuf,
 ) -> anyhow::Result<impl Iterator<Item = ApiUrl>> {
-    let backend_routes = RouteDefinition::scrape_backend(&backend_root_dir)?;
-    let mut api_url_to_backend_route: HashMap<_, _> = backend_routes
-        .map(|route| (route.full_api_url.clone(), route))
+    let backend_route_defs = RouteDefinition::scrape_backend(&backend_root_dir)?;
+    let mut api_url_to_backend_route: HashMap<_, _> = backend_route_defs
+        .map(|route| (route.api_url.clone(), route))
         .collect();
 
     let frontend_subdirs = children_at_depth_one(&frontend_root_dir)
@@ -35,15 +33,15 @@ pub fn search_api_url(
     let mut results = vec![];
 
     for dir in frontend_subdirs {
-        let path = dir.path();
-        let frontend_files = WalkDir::new(path).max_depth(1);
+        let files = WalkDir::new(dir.path()).max_depth(1);
 
-        if let Ok(dir) = FrontendDir::try_from(frontend_files) {
-            for constant in ConstantUsage::scrape_dir(dir)? {
-                let backend_route = api_url_to_backend_route.remove(&constant.definition.api_url);
+        if let Ok(dir) = FrontendPaths::try_from(files) {
+            for frontend_usage in FrontendConstant::scrape_dir(dir)? {
+                let backend_route =
+                    api_url_to_backend_route.remove(&frontend_usage.definition.api_url);
 
                 results.push(ApiUrl {
-                    frontend_usage: constant,
+                    frontend_usage,
                     backend_route,
                 });
             }

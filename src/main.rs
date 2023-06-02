@@ -12,9 +12,6 @@ struct Cli {
     /// Path to the backend root directory with an `app.js` file.
     #[arg(short, long)]
     backend: PathBuf,
-
-    /// API URL query.
-    api_url_query: String,
 }
 
 fn main() -> anyhow::Result<()> {

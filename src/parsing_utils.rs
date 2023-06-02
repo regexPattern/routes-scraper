@@ -26,7 +26,7 @@ pub struct ParsingError {
     line_loc: LineLoc,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct LineLoc {
     pub line: usize,
     pub col: usize,

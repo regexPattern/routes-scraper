@@ -3,8 +3,8 @@ use swc_ecma_ast::Lit;
 
 use crate::parsing_utils::{self, LineLoc};
 
-#[derive(PartialEq, Debug)]
-pub struct Constant {
+#[derive(Clone, PartialEq, Debug)]
+pub struct ConstantDef {
     pub name: String,
     pub api_url: String,
     pub line_loc: LineLoc,
@@ -16,8 +16,8 @@ enum FileSpecError {
     MissingApiUrlsExport,
 }
 
-impl Constant {
-    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = Constant>> {
+impl ConstantDef {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ConstantDef>> {
         let source_map = SourceMap::default();
         let source_file = source_map.new_source_file(FileName::Anon, source);
         let mut parser = parsing_utils::default_parser(&source_file);
@@ -45,7 +45,7 @@ impl Constant {
                 _ => return None,
             };
 
-            Some(Constant {
+            Some(ConstantDef {
                 name,
                 api_url,
                 line_loc,
@@ -67,7 +67,7 @@ mod tests {
 export const apiUrls = 10;
 "#;
 
-        Constant::scrape(source.into()).unwrap().last();
+        ConstantDef::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -80,13 +80,13 @@ export const apiUrls = {
 };
 "#;
 
-        let constants: Vec<_> = Constant::scrape(source.into()).unwrap().collect();
+        let constants: Vec<_> = ConstantDef::scrape(source.into()).unwrap().collect();
 
         assert_eq!(constants.len(), 3);
 
         assert_eq!(
             &constants[0],
-            &Constant {
+            &ConstantDef {
                 name: "GET_RESULTS".into(),
                 api_url: "/api/causal/results".into(),
                 line_loc: LineLoc { line: 3, col: 2 },
@@ -95,7 +95,7 @@ export const apiUrls = {
 
         assert_eq!(
             &constants[1],
-            &Constant {
+            &ConstantDef {
                 name: "GET_ARCHIVEDRESULTS".into(),
                 api_url: "/api/causal/archivedresults".into(),
                 line_loc: LineLoc { line: 4, col: 2 },
@@ -104,7 +104,7 @@ export const apiUrls = {
 
         assert_eq!(
             &constants[2],
-            &Constant {
+            &ConstantDef {
                 name: "GET_TEST_BY_NAME".into(),
                 api_url: "/api/causal/test/name?name={{name}}".into(),
                 line_loc: LineLoc { line: 5, col: 2 },
@@ -124,7 +124,7 @@ export const apiUrls = {
 };
 "#;
 
-        let constants = Constant::scrape(source.into()).unwrap();
+        let constants = ConstantDef::scrape(source.into()).unwrap();
 
         assert_eq!(constants.count(), 3);
     }

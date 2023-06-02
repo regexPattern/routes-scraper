@@ -7,9 +7,9 @@ use swc_ecma_visit::{All, Visit, VisitAll};
 
 use crate::parsing_utils::{self, LineLoc};
 
-#[derive(PartialEq, Debug)]
-pub struct ServiceUsage {
-    pub component_method_signature: String,
+#[derive(Clone, PartialEq, Debug)]
+pub struct ComponentMethod {
+    pub signature: String,
     pub used_service_method_name: String,
     pub line_loc: LineLoc,
 }
@@ -31,8 +31,8 @@ pub enum FileSpecError {
     ServiceNotStoredAsAttribute(LineLoc),
 }
 
-impl ServiceUsage {
-    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ServiceUsage>> {
+impl ComponentMethod {
+    pub fn scrape(source: String) -> anyhow::Result<impl Iterator<Item = ComponentMethod>> {
         let source_map = SourceMap::default();
         let source_file = source_map.new_source_file(FileName::Anon, source);
         let mut parser = parsing_utils::default_parser(&source_file);
@@ -121,13 +121,13 @@ struct MethodServiceUsagesVisitor<'r, 's> {
     source_map: &'s SourceMap,
     signature: String,
     service_usage_re: &'r Regex,
-    usages: HashMap<String, ServiceUsage>,
+    usages: HashMap<String, ComponentMethod>,
 }
 
 impl VisitAll for MethodServiceUsagesVisitor<'_, '_> {
     fn visit_member_expr(&mut self, member_expr: &MemberExpr) {
         if let Ok(snippet) = self.source_map.span_to_snippet(member_expr.span) {
-            if let Some(used_service) = self.used_service_name(&snippet) {
+            if let Some(used_service_method_name) = self.used_service_method_name(&snippet) {
                 let line_loc = parsing_utils::line_loc_from_span(member_expr.span, self.source_map);
 
                 // Since we want to save each usage once, we hash each `MemberExpr` by the name of
@@ -135,20 +135,22 @@ impl VisitAll for MethodServiceUsagesVisitor<'_, '_> {
                 // such as: `this.service.method().subscribe()` can be decomposed into inner
                 // `MemberExpr`s, but we only really care about one of them.
                 //
-                let usage_hash = format!("{used_service}:{}", line_loc.line);
+                let service_usage_hash = format!("{used_service_method_name}:{}", line_loc.line);
 
-                self.usages.entry(usage_hash).or_insert(ServiceUsage {
-                    component_method_signature: self.signature.clone(),
-                    used_service_method_name: used_service,
-                    line_loc,
-                });
+                self.usages
+                    .entry(service_usage_hash)
+                    .or_insert(ComponentMethod {
+                        signature: self.signature.clone(),
+                        used_service_method_name,
+                        line_loc,
+                    });
             }
         }
     }
 }
 
 impl MethodServiceUsagesVisitor<'_, '_> {
-    fn used_service_name(&self, snippet: &str) -> Option<String> {
+    fn used_service_method_name(&self, snippet: &str) -> Option<String> {
         self.service_usage_re
             .captures(snippet)?
             .get(1)
@@ -160,7 +162,7 @@ fn get_service_usages_in_method(
     method: &ClassMethod,
     source_map: &SourceMap,
     service_usage_re: &Regex,
-) -> Option<impl Iterator<Item = ServiceUsage>> {
+) -> Option<impl Iterator<Item = ComponentMethod>> {
     let body = method.function.body.as_ref()?;
 
     let (_, signature) = parsing_utils::gen_method_name_and_signature(method, source_map).unwrap();
@@ -217,7 +219,7 @@ import { Service } from './service';
 class Service {}
 "#;
 
-        ServiceUsage::scrape(source.into()).unwrap().last();
+        ComponentMethod::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -252,7 +254,7 @@ import { Service } from '../parent_dir';
 export class Service {}
 "#;
 
-        ServiceUsage::scrape(source.into()).unwrap().last();
+        ComponentMethod::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -264,7 +266,7 @@ import { Service } from './service';
 export class Service {}
 "#;
 
-        ServiceUsage::scrape(source.into()).unwrap().last();
+        ComponentMethod::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -317,7 +319,7 @@ export class Service {
 }
 "#;
 
-        ServiceUsage::scrape(source.into()).unwrap().last();
+        ComponentMethod::scrape(source.into()).unwrap().last();
     }
 
     #[test]
@@ -356,15 +358,15 @@ export class Component {
 
         assert_eq!(service_usages.len(), 2);
 
-        assert!(service_usages.contains(&ServiceUsage {
+        assert!(service_usages.contains(&ComponentMethod {
             used_service_method_name: "serviceMethod1".into(),
-            component_method_signature: "method1(): any".into(),
+            signature: "method1(): any".into(),
             line_loc: LineLoc { line: 4, col: 4 },
         }));
 
-        assert!(service_usages.contains(&ServiceUsage {
+        assert!(service_usages.contains(&ComponentMethod {
             used_service_method_name: "serviceMethod2".into(),
-            component_method_signature: "method1(): any".into(),
+            signature: "method1(): any".into(),
             line_loc: LineLoc { line: 9, col: 10 },
         }));
     }
@@ -390,7 +392,7 @@ export class Component {
 }
 "#;
 
-        let usages = ServiceUsage::scrape(source.into()).unwrap();
+        let usages = ComponentMethod::scrape(source.into()).unwrap();
 
         assert_eq!(usages.count(), 3);
     }
