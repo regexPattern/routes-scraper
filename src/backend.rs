@@ -8,7 +8,6 @@ use std::{
 
 use anyhow::Context;
 use app::RouteWithHandler;
-use regex::Regex;
 
 use crate::parsing_utils::LineLoc;
 
@@ -48,7 +47,7 @@ impl RouteDefinition {
                         format!("{}/{}", route.base_url, handler_def.url_suffix).replace("//", "/");
 
                     Self {
-                        api_url: adapt_backend_api_url_to_frontend_format(&api_url),
+                        api_url,
                         path: handler_path_from_cwd.clone(),
                         line_loc: handler_def.line_loc,
                     }
@@ -57,26 +56,5 @@ impl RouteDefinition {
         }
 
         Ok(route_defs.into_iter())
-    }
-}
-
-fn adapt_backend_api_url_to_frontend_format(api_url: &str) -> String {
-    lazy_static::lazy_static! {
-        static ref SANITIZER_RE: Regex = Regex::new(r#":(\w+)(.*)"#).unwrap();
-    }
-
-    SANITIZER_RE.replace(api_url, "{{$1}}").to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn adapting_backend_api_with_query_params() {
-        let frontend_api_url =
-            adapt_backend_api_url_to_frontend_format("/api/causal/filters/:testId".into());
-
-        assert_eq!(frontend_api_url, "/api/causal/filters/{{testId}}");
     }
 }

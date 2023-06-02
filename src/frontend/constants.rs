@@ -1,3 +1,4 @@
+use regex::Regex;
 use swc_common::{FileName, SourceMap};
 use swc_ecma_ast::Lit;
 
@@ -7,6 +8,7 @@ use crate::parsing_utils::{self, LineLoc};
 pub struct ConstantDef {
     pub name: String,
     pub api_url: String,
+    pub backend_api_url: String,
     pub line_loc: LineLoc,
 }
 
@@ -47,6 +49,7 @@ impl ConstantDef {
 
             Some(ConstantDef {
                 name,
+                backend_api_url: adapt_frontend_api_url(&api_url),
                 api_url,
                 line_loc,
             })
@@ -54,6 +57,19 @@ impl ConstantDef {
 
         Ok(constants)
     }
+}
+
+fn adapt_frontend_api_url(api_url: &str) -> String {
+    lazy_static::lazy_static! {
+        static ref API_URL_QUERY_PARAMS_ADAPTER_RE: Regex = Regex::new(r#"(.*)(?:\?.*)"#).unwrap();
+        static ref API_URL_DYNAMIC_PATH_ADAPTER_RE: Regex = Regex::new(r#"\{\{(\w+)\}\}(\?.*)?"#).unwrap();
+    }
+
+    let api_url_without_query_params = API_URL_QUERY_PARAMS_ADAPTER_RE.replace_all(api_url, "$1");
+
+    API_URL_DYNAMIC_PATH_ADAPTER_RE
+        .replace_all(api_url_without_query_params.trim_end_matches('/'), ":$1")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -89,6 +105,7 @@ export const apiUrls = {
             &ConstantDef {
                 name: "GET_RESULTS".into(),
                 api_url: "/api/causal/results".into(),
+                backend_api_url: adapt_frontend_api_url("/api/causal/results"),
                 line_loc: LineLoc { line: 3, col: 2 },
             }
         );
@@ -98,6 +115,7 @@ export const apiUrls = {
             &ConstantDef {
                 name: "GET_ARCHIVEDRESULTS".into(),
                 api_url: "/api/causal/archivedresults".into(),
+                backend_api_url: adapt_frontend_api_url("/api/causal/archivedresults"),
                 line_loc: LineLoc { line: 4, col: 2 },
             }
         );
@@ -107,6 +125,7 @@ export const apiUrls = {
             &ConstantDef {
                 name: "GET_TEST_BY_NAME".into(),
                 api_url: "/api/causal/test/name?name={{name}}".into(),
+                backend_api_url: adapt_frontend_api_url("/api/causal/test/name?name={{name}}"),
                 line_loc: LineLoc { line: 5, col: 2 },
             }
         );
@@ -127,5 +146,41 @@ export const apiUrls = {
         let constants = ConstantDef::scrape(source.into()).unwrap();
 
         assert_eq!(constants.count(), 3);
+    }
+
+    #[test]
+    fn adapting_a_simple_api_url() {
+        let without_trailing_slash = "/api/causal/meta/kpis";
+        let with_trailing_slash = "/api/causal/meta/kpis/";
+
+        assert_eq!(
+            adapt_frontend_api_url(without_trailing_slash),
+            "/api/causal/meta/kpis"
+        );
+
+        assert_eq!(
+            adapt_frontend_api_url(with_trailing_slash),
+            "/api/causal/meta/kpis"
+        );
+    }
+
+    #[test]
+    fn adapting_api_url_with_multiple_dynamic_path_segments() {
+        let constant_def = "/api/causal/daterange/{{testId}}/{{pre}}/{{post}}";
+
+        assert_eq!(
+            adapt_frontend_api_url(constant_def),
+            "/api/causal/daterange/:testId/:pre/:post"
+        );
+    }
+
+    #[test]
+    fn adapting_api_url_with_query_params() {
+        let constant_def = "/api/causal/chart/{{testId}}?site_name={{site}}&segment={{segment}}&page_lob={{lob}}&page_type={{page}}&device={{device}}&metric={{metric}}";
+
+        assert_eq!(
+            adapt_frontend_api_url(constant_def),
+            "/api/causal/chart/:testId"
+        );
     }
 }

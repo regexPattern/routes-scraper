@@ -22,9 +22,15 @@ pub struct FrontendPaths {
 
 #[derive(Debug)]
 pub struct FrontendConstant {
-    pub definition: ConstantDef,
-    pub service_usage: Option<ServiceMethod>,
-    pub component_usage: Option<ComponentMethod>,
+    pub definition: WithPath<ConstantDef>,
+    pub service_usage: Option<WithPath<ServiceMethod>>,
+    pub component_usage: Option<WithPath<ComponentMethod>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct WithPath<D> {
+    pub data: D,
+    pub path: PathBuf,
 }
 
 impl FrontendConstant {
@@ -60,6 +66,7 @@ impl FrontendConstant {
                 constant_def,
                 &mut constant_name_to_service_methods,
                 &mut service_method_name_to_component_method,
+                &dir,
             )
         });
 
@@ -71,31 +78,41 @@ fn bundle_constant_service_component_usages(
     constant_def: ConstantDef,
     constant_name_to_service_methods: &mut HashMap<String, Vec<ServiceMethod>>,
     service_method_name_to_component_method: &mut HashMap<String, Vec<ComponentMethod>>,
+    paths: &FrontendPaths,
 ) -> impl Iterator<Item = FrontendConstant> {
     let mut frontend_constant_usages = vec![];
 
+    let constant_usage = FrontendConstant {
+        definition: WithPath {
+            data: constant_def,
+            path: paths.constants.clone(),
+        },
+        service_usage: None,
+        component_usage: None,
+    };
+
     let service_methods_where_const_is_used =
-        match constant_name_to_service_methods.remove(&constant_def.name) {
+        match constant_name_to_service_methods.remove(&constant_usage.definition.data.name) {
             Some(usages) => usages,
             None => {
-                frontend_constant_usages.push(FrontendConstant {
-                    definition: constant_def,
-                    service_usage: None,
-                    component_usage: None,
-                });
-
+                frontend_constant_usages.push(constant_usage);
                 return frontend_constant_usages.into_iter();
             }
         };
 
     for service_method in service_methods_where_const_is_used {
+        let service_usage = WithPath {
+            data: service_method,
+            path: paths.service.clone(),
+        };
+
         let component_methods_where_service_is_used =
-            match service_method_name_to_component_method.remove(&service_method.name) {
+            match service_method_name_to_component_method.remove(&service_usage.data.name) {
                 Some(usages) => usages,
                 None => {
                     frontend_constant_usages.push(FrontendConstant {
-                        definition: constant_def.clone(),
-                        service_usage: Some(service_method),
+                        definition: constant_usage.definition.clone(),
+                        service_usage: Some(service_usage),
                         component_usage: None,
                     });
 
@@ -105,9 +122,12 @@ fn bundle_constant_service_component_usages(
 
         for component_method in component_methods_where_service_is_used {
             frontend_constant_usages.push(FrontendConstant {
-                definition: constant_def.clone(),
-                service_usage: Some(service_method.clone()),
-                component_usage: Some(component_method),
+                definition: constant_usage.definition.clone(),
+                service_usage: Some(service_usage.clone()),
+                component_usage: Some(WithPath {
+                    data: component_method,
+                    path: paths.component.clone(),
+                }),
             });
         }
     }
@@ -152,24 +172,4 @@ where
 {
     let source = fs::read_to_string(path)?;
     parser_fn(source).with_context(|| format!("Failed parsing {:?}", path))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scraping_constants_from_real_data() {
-        let dir = FrontendPaths {
-            constants: "./test_data/frontend/causal-impact/constants.ts".into(),
-            service: "./test_data/frontend/causal-impact/causal.service.ts".into(),
-            component: "./test_data/frontend/causal-impact/causal-impact.component.ts".into(),
-        };
-
-        let constants = FrontendConstant::scrape_dir(dir).unwrap();
-        let constants = constants.collect::<Vec<_>>();
-        dbg!(constants);
-
-        // assert_eq!(constants.count(), 24);
-    }
 }

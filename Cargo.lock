@@ -676,12 +676,14 @@ dependencies = [
  "include-bytes-plus",
  "lazy_static",
  "regex",
+ "serde",
  "swc_common",
  "swc_ecma_ast",
  "swc_ecma_parser",
  "swc_ecma_visit",
  "tabled",
  "thiserror",
+ "url",
  "walkdir",
 ]
 
