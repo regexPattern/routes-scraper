@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use clap::Parser;
 use csv::Writer;
 
+const DEFAULT_FRONTEND_DIR: &str = "./frontend";
+const DEFAULT_BACKEND_DIR: &str = "./backend";
+
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -26,8 +29,8 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let frontend_dir = cli.frontend.unwrap_or("./frontend".into());
-    let backend_dir = cli.backend.unwrap_or("./backend".into());
+    let frontend_dir = cli.frontend.unwrap_or(DEFAULT_FRONTEND_DIR.into());
+    let backend_dir = cli.backend.unwrap_or(DEFAULT_BACKEND_DIR.into());
 
     let api_urls: Vec<_> =
         routes_scraper::search_api_urls(frontend_dir, backend_dir, cli.constant_name_query)?
