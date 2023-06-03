@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use csv::Writer;
 
 const DEFAULT_FRONTEND_DIR: &str = "./frontend";
 const DEFAULT_BACKEND_DIR: &str = "./backend";
@@ -16,10 +15,6 @@ struct Cli {
     /// Path to the backend root directory with an `app.js` file. Defaults to `./backend`.
     #[arg(long)]
     backend: Option<PathBuf>,
-
-    /// Emit the results as CSV insted of JSON.
-    #[arg(short, long)]
-    csv: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -28,20 +23,11 @@ fn main() -> anyhow::Result<()> {
     let frontend_dir = cli.frontend.unwrap_or(DEFAULT_FRONTEND_DIR.into());
     let backend_dir = cli.backend.unwrap_or(DEFAULT_BACKEND_DIR.into());
 
-    let api_urls: Vec<_> = routes_scraper::search_api_urls(frontend_dir, backend_dir)?.collect();
+    let api_urls: Vec<_> = routes_scraper::scrape_routes(frontend_dir, backend_dir)?
+        .take(3)
+        .collect();
 
-    let output = if cli.csv {
-        let mut csv_writer = Writer::from_writer(Vec::new());
-
-        for api_url in api_urls {
-            csv_writer.serialize(api_url)?;
-        }
-
-        csv_writer.flush()?;
-        String::from_utf8(csv_writer.into_inner()?)?
-    } else {
-        serde_json::to_string(&api_urls)?
-    };
+    let output = serde_json::to_string(&api_urls)?;
 
     println!("{output}");
 

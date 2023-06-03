@@ -8,19 +8,20 @@ use std::{
 
 use anyhow::Context;
 use app::RouteWithHandler;
+use serde::ser::{self, SerializeStruct};
 
 use crate::parsing_utils::LineLoc;
 
 use self::route_handlers::RouteHandlerDefinition;
 
 #[derive(Debug)]
-pub struct RouteDefinition {
+pub struct RouteHandler {
     pub api_url: String,
     pub path: PathBuf,
     pub line_loc: LineLoc,
 }
 
-impl RouteDefinition {
+impl RouteHandler {
     pub fn scrape_backend(backend_root_dir: &Path) -> anyhow::Result<impl Iterator<Item = Self>> {
         let app_js_path = backend_root_dir.join("app.js");
         let app_js_source = fs::read_to_string(&app_js_path)
@@ -57,5 +58,19 @@ impl RouteDefinition {
         }
 
         Ok(route_defs.into_iter())
+    }
+}
+
+impl ser::Serialize for RouteHandler {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("BackendHandler", 3)?;
+
+        state.serialize_field("file_path", &self.path)?;
+        state.serialize_field("file_location", &self.line_loc)?;
+
+        state.end()
     }
 }

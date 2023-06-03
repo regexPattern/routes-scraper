@@ -8,7 +8,6 @@ description = "Search for usages of an API URL within a fullstack project"
 [dependencies]
 anyhow = "1.0.71"
 clap = { version = "4.3.0", features = ["derive"] }
-csv = "1.2.2"
 lazy_static = "1.4.0"
 regex = "1.8.2"
 serde = { version = "1.0.163", features = ["derive"] }

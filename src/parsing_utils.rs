@@ -3,6 +3,7 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
+use serde::Serialize;
 use swc_common::{Loc, SourceFile, SourceMap, SourceMapper, Span, Spanned};
 use swc_ecma_ast::{ClassDecl, ClassMethod, EsVersion, ExportDecl, Expr, Module, VarDecl};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
@@ -26,7 +27,7 @@ pub struct ParsingError {
     line_loc: LineLoc,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Serialize, Copy, Clone, PartialEq, Debug)]
 pub struct LineLoc {
     pub line: usize,
     pub col: usize,

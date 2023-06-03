@@ -9,6 +9,10 @@ use std::{
 };
 
 use anyhow::Context;
+use serde::{
+    ser::{self, SerializeStruct},
+    Serialize,
+};
 use walkdir::WalkDir;
 
 pub use self::{component::ComponentMethod, constants::ConstantDef, service::ServiceMethod};
@@ -20,9 +24,11 @@ pub struct FrontendPaths {
     pub component: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct FrontendConstant {
+    #[serde(rename(serialize = "constant"))]
     pub definition: WithPath<ConstantDef>,
+
     pub service_usage: Option<WithPath<ServiceMethod>>,
     pub component_usage: Option<WithPath<ComponentMethod>>,
 }
@@ -172,4 +178,49 @@ where
 {
     let source = fs::read_to_string(path)?;
     parser_fn(source).with_context(|| format!("Failed parsing {:?}", path))
+}
+
+impl ser::Serialize for WithPath<ConstantDef> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ConstantDef", 3)?;
+
+        state.serialize_field("name", &self.data.name)?;
+        state.serialize_field("file_path", &self.path)?;
+        state.serialize_field("file_location", &self.data.line_loc)?;
+
+        state.end()
+    }
+}
+
+impl ser::Serialize for WithPath<ServiceMethod> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ServiceMethod", 3)?;
+
+        state.serialize_field("method_signature", &self.data.signature)?;
+        state.serialize_field("file_path", &self.path)?;
+        state.serialize_field("file_location", &self.data.line_loc)?;
+
+        state.end()
+    }
+}
+
+impl ser::Serialize for WithPath<ComponentMethod> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("ComponentMethod", 3)?;
+
+        state.serialize_field("method_signature", &self.data.signature)?;
+        state.serialize_field("file_path", &self.path)?;
+        state.serialize_field("file_location", &self.data.line_loc)?;
+
+        state.end()
+    }
 }
