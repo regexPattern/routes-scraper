@@ -11,7 +11,7 @@ use std::{
 use anyhow::Context;
 use walkdir::WalkDir;
 
-use self::{component::ComponentMethod, constants::ConstantDef, service::ServiceMethod};
+pub use self::{component::ComponentMethod, constants::ConstantDef, service::ServiceMethod};
 
 #[derive(PartialEq, Debug)]
 pub struct FrontendPaths {

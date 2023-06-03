@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use csv::Writer;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -19,10 +20,15 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let api_urls: Vec<_> =
-        routes_scraper::search_api_urls(cli.frontend, cli.backend, cli.api_url_query)?.collect();
+    let api_urls = routes_scraper::search_api_urls(cli.frontend, cli.backend, cli.api_url_query)?;
 
-    dbg!(api_urls);
+    let mut csv_writer = Writer::from_writer(std::io::stdout());
+
+    for api_url in api_urls {
+        csv_writer.serialize(api_url)?;
+    }
+
+    csv_writer.flush()?;
 
     Ok(())
 }

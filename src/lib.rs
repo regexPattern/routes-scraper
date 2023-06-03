@@ -1,6 +1,7 @@
 pub mod backend;
 pub mod frontend;
 mod parsing_utils;
+mod serialize;
 
 use std::{collections::HashMap, path::PathBuf};
 
