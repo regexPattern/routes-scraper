@@ -17,10 +17,6 @@ struct Cli {
     #[arg(long)]
     backend: Option<PathBuf>,
 
-    /// Optional name of the constant to look for. As of now the matching filters based on strict
-    /// equality of the given name.
-    constant_name_query: Option<String>,
-
     /// Emit the results as CSV insted of JSON.
     #[arg(short, long)]
     csv: bool,
@@ -32,9 +28,7 @@ fn main() -> anyhow::Result<()> {
     let frontend_dir = cli.frontend.unwrap_or(DEFAULT_FRONTEND_DIR.into());
     let backend_dir = cli.backend.unwrap_or(DEFAULT_BACKEND_DIR.into());
 
-    let api_urls: Vec<_> =
-        routes_scraper::search_api_urls(frontend_dir, backend_dir, cli.constant_name_query)?
-            .collect();
+    let api_urls: Vec<_> = routes_scraper::search_api_urls(frontend_dir, backend_dir)?.collect();
 
     let output = if cli.csv {
         let mut csv_writer = Writer::from_writer(Vec::new());

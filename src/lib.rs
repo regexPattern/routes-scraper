@@ -19,7 +19,6 @@ pub struct ApiUrl {
 pub fn search_api_urls(
     frontend_root_dir: PathBuf,
     backend_root_dir: PathBuf,
-    search_query: Option<String>,
 ) -> anyhow::Result<impl Iterator<Item = ApiUrl>> {
     let backend_route_defs = RouteDefinition::scrape_backend(&backend_root_dir)?;
 
@@ -55,13 +54,6 @@ pub fn search_api_urls(
             }
         }
     }
-
-    if let Some(search_query) = search_query {
-        api_urls = api_urls
-            .into_iter()
-            .filter(|api_url| api_url.frontend_constant.definition.data.name == search_query)
-            .collect()
-    };
 
     Ok(api_urls.into_iter())
 }
