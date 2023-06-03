@@ -3,8 +3,9 @@ pub mod frontend;
 mod output;
 mod parsing_utils;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
+use anyhow::Context;
 use backend::RouteDefinition;
 use frontend::{FrontendConstant, FrontendPaths};
 use walkdir::WalkDir;
@@ -21,6 +22,11 @@ pub fn search_api_urls(
     search_query: Option<String>,
 ) -> anyhow::Result<impl Iterator<Item = ApiUrl>> {
     let backend_route_defs = RouteDefinition::scrape_backend(&backend_root_dir)?;
+
+    // REFACTOR: I don't like having to create an iterator just to get an adequate error.
+    fs::read_dir(&frontend_root_dir)
+        .with_context(|| format!("Failed to read {:?}", frontend_root_dir))?;
+
     let mut api_url_to_backend_route: HashMap<_, _> = backend_route_defs
         .map(|route| (route.api_url.clone(), route))
         .collect();

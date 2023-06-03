@@ -23,7 +23,8 @@ pub struct RouteDefinition {
 impl RouteDefinition {
     pub fn scrape_backend(backend_root_dir: &Path) -> anyhow::Result<impl Iterator<Item = Self>> {
         let app_js_path = backend_root_dir.join("app.js");
-        let app_js_source = fs::read_to_string(&app_js_path)?;
+        let app_js_source = fs::read_to_string(&app_js_path)
+            .with_context(|| format!("Failed to read {:?}", app_js_path))?;
 
         let route_w_handlers = RouteWithHandler::scrape(app_js_source)?;
 
@@ -39,7 +40,7 @@ impl RouteDefinition {
                 backend_root_dir.join(path_from_app_js).with_extension("js");
 
             let handlers_src = fs::read_to_string(&handler_path_from_cwd)
-                .with_context(|| format!("Failed reading {:?}", handler_path_from_cwd))?;
+                .with_context(|| format!("Failed to read {:?}", handler_path_from_cwd))?;
 
             route_defs.extend(
                 RouteHandlerDefinition::scrape(handlers_src)?.map(|handler_def| {
