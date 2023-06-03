@@ -21,3 +21,5 @@ The CLI application documents itself. The display the help menu pass the `--help
 ```sh
 routes-scraper --help
 ```
+
+Since the scraper outputs the results as a JSON array of route objects, it is recommended to use a tool like [jq](https://github.com/jqlang/jq) to process these results.
