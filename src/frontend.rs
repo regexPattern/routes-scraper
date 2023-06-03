@@ -188,6 +188,7 @@ impl ser::Serialize for WithPath<ConstantDef> {
         let mut state = serializer.serialize_struct("ConstantDef", 3)?;
 
         state.serialize_field("name", &self.data.name)?;
+        state.serialize_field("api_url", &self.data.api_url)?;
         state.serialize_field("file_path", &self.path)?;
         state.serialize_field("file_location", &self.data.line_loc)?;
 
