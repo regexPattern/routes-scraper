@@ -6,29 +6,47 @@ use csv::Writer;
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
-    /// Path to the frontend root directory.
+    /// Path to the frontend root directory. Defaults to `./frontend`.
     #[arg(long)]
-    frontend: PathBuf,
+    frontend: Option<PathBuf>,
 
-    /// Path to the backend root directory with an `app.js` file.
+    /// Path to the backend root directory with an `app.js` file. Defaults to `./backend`.
     #[arg(long)]
-    backend: PathBuf,
+    backend: Option<PathBuf>,
 
-    api_url_query: Option<String>,
+    /// Optional name of the constant to look for. As of now the matching filters based on strict
+    /// equality of the given name.
+    constant_name_query: Option<String>,
+
+    /// Emit the results as CSV insted of JSON.
+    #[arg(short, long)]
+    csv: bool,
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let api_urls = routes_scraper::search_api_urls(cli.frontend, cli.backend, cli.api_url_query)?;
+    let frontend_dir = cli.frontend.unwrap_or("./frontend".into());
+    let backend_dir = cli.backend.unwrap_or("./backend".into());
 
-    let mut csv_writer = Writer::from_writer(std::io::stdout());
+    let api_urls: Vec<_> =
+        routes_scraper::search_api_urls(frontend_dir, backend_dir, cli.constant_name_query)?
+            .collect();
 
-    for api_url in api_urls {
-        csv_writer.serialize(api_url)?;
-    }
+    let output = if cli.csv {
+        let mut csv_writer = Writer::from_writer(Vec::new());
 
-    csv_writer.flush()?;
+        for api_url in api_urls {
+            csv_writer.serialize(api_url)?;
+        }
+
+        csv_writer.flush()?;
+        String::from_utf8(csv_writer.into_inner()?)?
+    } else {
+        serde_json::to_string(&api_urls)?
+    };
+
+    println!("{output}");
 
     Ok(())
 }
