@@ -23,9 +23,7 @@ fn main() -> anyhow::Result<()> {
     let frontend_dir = cli.frontend.unwrap_or(DEFAULT_FRONTEND_DIR.into());
     let backend_dir = cli.backend.unwrap_or(DEFAULT_BACKEND_DIR.into());
 
-    let api_urls: Vec<_> = routes_scraper::scrape_routes(frontend_dir, backend_dir)?
-        .take(3)
-        .collect();
+    let api_urls: Vec<_> = routes_scraper::scrape_routes(frontend_dir, backend_dir)?.collect();
 
     let output = serde_json::to_string(&api_urls)?;
 
