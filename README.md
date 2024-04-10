@@ -2,7 +2,7 @@
 
 Search for a specific API URL in your fullstack application source, leveraging the power of [SWC](https://github.com/swc-project/swc) (what the NextJS's compiler uses) to accurately find usages of a given endpoint.
 
-Your fullstack project must adhere to the specification that the example `test_data` project structure showcase. If your files don't follow this structure, you will get gentle and helpful errors when the scraper tries to parse these files.
+Your fullstack project must adhere to the specification that the example [`test_data`](https://github.com/regexPattern/routes-scraper/issues/1) project structure showcase. If your files don't follow this structure, you will get gentle and helpful errors when the scraper tries to parse these files.
 
 ## Installation
 
